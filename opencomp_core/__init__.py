@@ -20,8 +20,9 @@ bl_info = {
 # 4. node categories (Add menu)
 # 5. gpu_pipeline (executor, pool, framebuffer)
 # 6. ui panels and operators
-# 7. conform tool
-# 8. openclaw_integration (last — depends on everything)
+# 7. node_canvas (GPU-rendered canvas)
+# 8. conform tool
+# 9. openclaw_integration (last — depends on everything)
 
 import bpy
 import nodeitems_utils
@@ -245,9 +246,13 @@ def register():
     bpy.utils.register_class(OC_PT_active_node)
     bpy.utils.register_class(OC_PT_active_node_properties)
 
-    # Register Qt canvas launch operator
-    from .qt_canvas.blender_launch import register_operator as register_canvas_operator
-    register_canvas_operator()
+    # Register native GPU node canvas (replaces Qt canvas)
+    from .node_canvas import operators as canvas_ops
+    canvas_ops.register()
+
+    # Register Nuke-style UI (replaces all Blender panels)
+    from . import ui
+    ui.register()
 
     # Override node editor context menu
     _override_node_context_menu()
@@ -266,9 +271,13 @@ def unregister():
     # Restore node editor context menu
     _restore_node_context_menu()
 
-    # Unregister Qt canvas launch operator
-    from .qt_canvas.blender_launch import unregister_operator as unregister_canvas_operator
-    unregister_canvas_operator()
+    # Unregister Nuke-style UI
+    from . import ui
+    ui.unregister()
+
+    # Unregister native GPU node canvas
+    from .node_canvas import operators as canvas_ops
+    canvas_ops.unregister()
 
     # Unregister UI panels
     for cls in (OC_PT_active_node_properties, OC_PT_active_node):

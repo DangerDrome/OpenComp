@@ -854,26 +854,16 @@ def _restore_quick_setup():
             pass
 
 
-# ── Qt Canvas Auto-Launch ──────────────────────────────────────────────
+# ── Native Canvas Auto-Launch ──────────────────────────────────────────
 
-def _launch_qt_canvas():
-    """Auto-launch the Qt canvas — the primary node editor for OpenComp.
+def _launch_native_canvas():
+    """Start the native GPU canvas modal.
 
-    The Qt canvas runs as a separate process and is THE node editor.
-    Blender's built-in node editor is only used as a fallback/sync target.
+    The canvas modal handles all input in the Node Editor area while
+    allowing other panels to work normally.
     """
-    try:
-        from opencomp_core.qt_canvas.blender_launch import launch_canvas
-
-        # Launch the Qt canvas (non-blocking, fire and forget)
-        launch_canvas()
-
-    except ImportError as e:
-        print(f"[OpenComp] Qt canvas not available: {e}")
-        print("[OpenComp] Install PySide6 and NodeGraphQt-QuiltiX-fork:")
-        print("           pip3 install PySide6 NodeGraphQt-QuiltiX-fork")
-    except Exception as e:
-        print(f"[OpenComp] Qt canvas launch error: {e}")
+    # The canvas modal auto-starts via a timer in operators.py register()
+    print("[OpenComp] Native canvas will start via timer")
 
 
 # ── Window Title ───────────────────────────────────────────────────────
@@ -1240,10 +1230,9 @@ def _deferred_ui_setup():
         # Replace OS window title (best-effort, X11 only)
         _set_window_title()
 
-        # Auto-launch the Qt canvas (the primary node editor)
-        print("[OpenComp] About to launch Qt canvas...")
-        _launch_qt_canvas()
-        print("[OpenComp] Qt canvas launch function returned")
+        # Auto-launch the native GPU canvas (the primary node editor)
+        print("[OpenComp] Launching native canvas...")
+        _launch_native_canvas()
 
         # Auto-save the configured layout as user startup so it persists
         try:
