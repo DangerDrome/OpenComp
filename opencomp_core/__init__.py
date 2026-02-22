@@ -191,6 +191,13 @@ def _import_nodes():
 # Node categories for the Add menu
 _category_name = "OC_NODE_CATEGORIES"
 
+def _draw_canvas_button(self, context):
+    """Draw the 'Open Qt Canvas' button in the Node Editor header."""
+    if context.space_data.tree_type == "OC_NT_compositor":
+        layout = self.layout
+        layout.operator("oc.launch_canvas", text="", icon='WINDOW')
+
+
 _node_categories = [
     OpenCompNodeCategory("OC_CAT_INPUT", "Input", items=[
         NodeItem("OC_N_read"),
@@ -238,13 +245,30 @@ def register():
     bpy.utils.register_class(OC_PT_active_node)
     bpy.utils.register_class(OC_PT_active_node_properties)
 
+    # Register Qt canvas launch operator
+    from .qt_canvas.blender_launch import register_operator as register_canvas_operator
+    register_canvas_operator()
+
     # Override node editor context menu
     _override_node_context_menu()
 
+    # Add menu item to Node Editor header
+    bpy.types.NODE_HT_header.append(_draw_canvas_button)
+
 
 def unregister():
+    # Remove canvas button from header
+    try:
+        bpy.types.NODE_HT_header.remove(_draw_canvas_button)
+    except Exception:
+        pass
+
     # Restore node editor context menu
     _restore_node_context_menu()
+
+    # Unregister Qt canvas launch operator
+    from .qt_canvas.blender_launch import unregister_operator as unregister_canvas_operator
+    unregister_canvas_operator()
 
     # Unregister UI panels
     for cls in (OC_PT_active_node_properties, OC_PT_active_node):
