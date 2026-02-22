@@ -10,16 +10,21 @@ Usage:
 """
 
 import sys
+import os
 import argparse
 
 # Set Qt API before importing qtpy
-import os
 os.environ.setdefault('QT_API', 'pyside6')
 
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from qtpy.QtWidgets import QApplication
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, QTimer
 
 from ui.main_window import OpenCompMainWindow
+from ipc.client import IpcClient
+from ipc.protocol import cmd_get_graph_state
 
 
 def parse_args():
@@ -36,6 +41,11 @@ def parse_args():
         '--debug',
         action='store_true',
         help='Enable debug output'
+    )
+    parser.add_argument(
+        '--no-connect',
+        action='store_true',
+        help='Do not connect to Blender (standalone mode)'
     )
     return parser.parse_args()
 
@@ -76,12 +86,47 @@ def main():
     window = OpenCompMainWindow()
     window.show()
 
+    # IPC client (optional)
+    ipc_client = None
+
+    if not args.no_connect:
+        ipc_client = IpcClient(args.socket_path)
+
+        def on_connected():
+            window.set_status("Connected to Blender")
+            # Request current graph state
+            response = ipc_client.send_command(cmd_get_graph_state(), timeout_ms=2000)
+            if response and response.get('status') == 'graph_state':
+                from canvas.session import deserialize_graph_state
+                deserialize_graph_state(window.graph, response)
+
+        def on_disconnected():
+            window.set_status("Disconnected from Blender")
+
+        def on_message(msg):
+            # Handle async messages from Blender
+            if args.debug:
+                print(f"[OpenComp Canvas] Received: {msg}")
+
+        ipc_client.connected.connect(on_connected)
+        ipc_client.disconnected.connect(on_disconnected)
+        ipc_client.message_received.connect(on_message)
+
+        # Start IPC client thread
+        ipc_client.start()
+
     if args.debug:
         print(f"[OpenComp Canvas] Started")
         print(f"[OpenComp Canvas] Socket path: {args.socket_path}")
 
     # Run event loop
-    return app.exec()
+    result = app.exec()
+
+    # Cleanup
+    if ipc_client:
+        ipc_client.stop()
+
+    return result
 
 
 if __name__ == '__main__':

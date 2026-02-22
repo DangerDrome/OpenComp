@@ -12,11 +12,15 @@ import pathlib
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+# Add qt_canvas directly to avoid bpy import from opencomp_core/__init__.py
+QT_CANVAS_PATH = os.path.join(PROJECT_ROOT, "opencomp_core", "qt_canvas")
+sys.path.insert(0, QT_CANVAS_PATH)
+
 
 def test_protocol_imports():
     """Protocol module imports correctly."""
     try:
-        from opencomp_core.qt_canvas.ipc.protocol import (
+        from ipc.protocol import (
             SOCKET_PATH,
             cmd_ping, cmd_node_created, cmd_node_deleted,
             cmd_port_connected, cmd_port_disconnected,
@@ -34,7 +38,7 @@ def test_protocol_imports():
 def test_message_encoding():
     """Message encoding/decoding works correctly."""
     try:
-        from opencomp_core.qt_canvas.ipc.protocol import (
+        from ipc.protocol import (
             encode_message, decode_message, cmd_ping
         )
 
@@ -58,7 +62,7 @@ def test_message_encoding():
 def test_command_validation():
     """Command validation works correctly."""
     try:
-        from opencomp_core.qt_canvas.ipc.protocol import (
+        from ipc.protocol import (
             validate_command, validate_response,
             cmd_ping, response_pong
         )
@@ -90,7 +94,7 @@ def test_command_validation():
 def test_server_creation():
     """Server creates and starts correctly."""
     try:
-        from opencomp_core.qt_canvas.ipc.server import IpcServer
+        from ipc.server import IpcServer
         import pathlib
 
         test_socket = "/tmp/opencomp_test_ipc.sock"
@@ -119,8 +123,8 @@ def test_server_creation():
 def test_client_server_connection():
     """Client connects to server."""
     try:
-        from opencomp_core.qt_canvas.ipc.server import IpcServer
-        from opencomp_core.qt_canvas.ipc.client import IpcClientSync
+        from ipc.server import IpcServer
+        from ipc.client import IpcClientSync
         import pathlib
 
         test_socket = "/tmp/opencomp_test_ipc2.sock"
@@ -154,9 +158,9 @@ def test_client_server_connection():
 def test_ping_pong():
     """Ping/pong round trip works."""
     try:
-        from opencomp_core.qt_canvas.ipc.server import IpcServer
-        from opencomp_core.qt_canvas.ipc.client import IpcClientSync
-        from opencomp_core.qt_canvas.ipc.protocol import cmd_ping, encode_message, decode_message
+        from ipc.server import IpcServer
+        from ipc.client import IpcClientSync
+        from ipc.protocol import cmd_ping, encode_message, decode_message
         import pathlib
         import socket
         import threading
@@ -217,7 +221,7 @@ def test_ping_pong():
 def test_server_cleanup():
     """Server cleans up socket file on shutdown."""
     try:
-        from opencomp_core.qt_canvas.ipc.server import IpcServer
+        from ipc.server import IpcServer
         import pathlib
 
         test_socket = "/tmp/opencomp_test_ipc4.sock"

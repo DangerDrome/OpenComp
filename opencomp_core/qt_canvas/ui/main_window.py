@@ -9,11 +9,19 @@ from qtpy.QtWidgets import (
 )
 from qtpy.QtCore import Qt, Signal
 
-from ..canvas.graph import OpenCompGraph
-from ..canvas.nodes import register_nodes
-from ..canvas.style import apply_style
-from ..canvas.shortcuts import setup_shortcuts
-from .properties import PropertiesPanel
+# Support both relative imports (as package) and absolute imports (standalone)
+try:
+    from ..canvas.graph import OpenCompGraph
+    from ..canvas.nodes import register_nodes
+    from ..canvas.style import apply_style
+    from ..canvas.shortcuts import setup_shortcuts
+    from .properties import PropertiesPanel
+except ImportError:
+    from canvas.graph import OpenCompGraph
+    from canvas.nodes import register_nodes
+    from canvas.style import apply_style
+    from canvas.shortcuts import setup_shortcuts
+    from ui.properties import PropertiesPanel
 
 
 class OpenCompMainWindow(QMainWindow):

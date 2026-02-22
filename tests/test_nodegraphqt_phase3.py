@@ -12,11 +12,15 @@ import pathlib
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+# Add qt_canvas directly to avoid bpy import from opencomp_core/__init__.py
+QT_CANVAS_PATH = os.path.join(PROJECT_ROOT, "opencomp_core", "qt_canvas")
+sys.path.insert(0, QT_CANVAS_PATH)
+
 
 def test_thumbnail_shm_write():
     """Thumbnail SHM file created correctly."""
     try:
-        from opencomp_core.qt_canvas.viewer.thumbnail import (
+        from viewer.thumbnail import (
             write_thumbnail, get_shm_path, clear_thumbnail,
             THUMB_WIDTH, THUMB_HEIGHT
         )
@@ -58,7 +62,7 @@ def test_thumbnail_shm_write():
 def test_thumbnail_read():
     """QImage created from SHM data has correct dimensions."""
     try:
-        from opencomp_core.qt_canvas.viewer.thumbnail import (
+        from viewer.thumbnail import (
             write_thumbnail, read_thumbnail, clear_thumbnail,
             THUMB_WIDTH, THUMB_HEIGHT
         )
@@ -108,7 +112,7 @@ def test_properties_panel_widgets():
     """Properties panel shows correct widgets for each param type."""
     try:
         from PySide6.QtWidgets import QApplication
-        from opencomp_core.qt_canvas.ui.properties import PropertiesPanel
+        from ui.properties import PropertiesPanel
 
         app = QApplication.instance()
         if app is None:
@@ -133,7 +137,7 @@ def test_properties_panel_widgets():
 def test_shortcuts_defined():
     """All keyboard shortcuts registered without conflict."""
     try:
-        from opencomp_core.qt_canvas.canvas.shortcuts import SHORTCUTS
+        from canvas.shortcuts import SHORTCUTS
 
         # Check expected shortcuts exist
         expected = [
@@ -164,7 +168,7 @@ def test_shortcuts_defined():
 def test_thumbnail_cleanup():
     """Thumbnail cleanup works correctly."""
     try:
-        from opencomp_core.qt_canvas.viewer.thumbnail import (
+        from viewer.thumbnail import (
             write_thumbnail, clear_thumbnail, get_shm_path,
             clear_all_thumbnails, THUMB_WIDTH, THUMB_HEIGHT
         )
@@ -202,7 +206,7 @@ def test_thumbnail_cleanup():
 def test_thumbnail_widget():
     """ThumbnailWidget updates correctly."""
     try:
-        from opencomp_core.qt_canvas.viewer.thumbnail import (
+        from viewer.thumbnail import (
             ThumbnailWidget, write_thumbnail, clear_thumbnail,
             THUMB_WIDTH, THUMB_HEIGHT
         )

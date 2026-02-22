@@ -10,6 +10,10 @@ import os
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+# Add qt_canvas directly to avoid bpy import from opencomp_core/__init__.py
+QT_CANVAS_PATH = os.path.join(PROJECT_ROOT, "opencomp_core", "qt_canvas")
+sys.path.insert(0, QT_CANVAS_PATH)
+
 
 def test_nodegraphqt_import():
     """NodeGraphQt imports without error."""
@@ -46,7 +50,7 @@ def test_opencomp_graph_instantiation():
         if app is None:
             app = QApplication([])
 
-        from opencomp_core.qt_canvas.canvas.graph import OpenCompGraph
+        from canvas.graph import OpenCompGraph
         graph = OpenCompGraph()
         assert graph is not None
         print("  ✓ OpenCompGraph instantiates correctly")
@@ -64,7 +68,7 @@ def test_layout_direction():
         if app is None:
             app = QApplication([])
 
-        from opencomp_core.qt_canvas.canvas.graph import OpenCompGraph
+        from canvas.graph import OpenCompGraph
         graph = OpenCompGraph()
 
         # Check layout direction is vertical (1)
@@ -85,8 +89,8 @@ def test_node_registration():
         if app is None:
             app = QApplication([])
 
-        from opencomp_core.qt_canvas.canvas.graph import OpenCompGraph
-        from opencomp_core.qt_canvas.canvas.nodes import register_nodes, NODE_CLASSES
+        from canvas.graph import OpenCompGraph
+        from canvas.nodes import register_nodes, NODE_CLASSES
 
         graph = OpenCompGraph()
         register_nodes(graph)
@@ -111,8 +115,8 @@ def test_node_colors():
         if app is None:
             app = QApplication([])
 
-        from opencomp_core.qt_canvas.canvas.graph import OpenCompGraph
-        from opencomp_core.qt_canvas.canvas.nodes import (
+        from canvas.graph import OpenCompGraph
+        from canvas.nodes import (
             register_nodes, NODE_CLASSES, NODE_COLORS
         )
 
@@ -170,7 +174,7 @@ def test_main_window():
         if app is None:
             app = QApplication([])
 
-        from opencomp_core.qt_canvas.ui.main_window import OpenCompMainWindow
+        from ui.main_window import OpenCompMainWindow
         window = OpenCompMainWindow()
         assert window is not None
         assert window.graph is not None
