@@ -52,21 +52,16 @@ def is_canvas_running(socket_path: str = "/tmp/opencomp_ipc.sock") -> bool:
 
 
 def launch_canvas(socket_path: str = "/tmp/opencomp_ipc.sock",
-                  wait_for_socket: float = 5.0) -> bool:
+                  blocking: bool = False) -> bool:
     """Launch the Qt canvas process.
 
     Args:
         socket_path: Path to the IPC socket.
-        wait_for_socket: Seconds to wait for socket to appear.
+        blocking: If True, wait for canvas to be ready. If False, fire and forget.
 
     Returns:
-        True if launch successful, False otherwise.
+        True if launch started successfully, False otherwise.
     """
-    # Check if already running
-    if is_canvas_running(socket_path):
-        print("[OpenComp] Canvas already running")
-        return True
-
     # Get launch script and Python
     launch_script = get_launch_script_path()
     python = get_python_executable()
@@ -75,32 +70,23 @@ def launch_canvas(socket_path: str = "/tmp/opencomp_ipc.sock",
         print(f"[OpenComp] Launch script not found: {launch_script}")
         return False
 
-    # Start process
+    print(f"[OpenComp] Launching Qt canvas...")
+    print(f"[OpenComp]   Python: {python}")
+    print(f"[OpenComp]   Script: {launch_script}")
+
+    # Start process (fire and forget - don't block Blender)
     try:
         process = subprocess.Popen(
-            [python, str(launch_script), "--socket-path", socket_path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            [python, str(launch_script), "--socket-path", socket_path, "--no-connect"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             start_new_session=True,  # Detach from Blender
         )
+        print(f"[OpenComp] Canvas process started (PID: {process.pid})")
+        return True
     except Exception as e:
         print(f"[OpenComp] Failed to launch canvas: {e}")
         return False
-
-    # Wait for socket to appear
-    socket_file = pathlib.Path(socket_path)
-    start = time.time()
-    while time.time() - start < wait_for_socket:
-        if socket_file.exists():
-            # Try to ping
-            time.sleep(0.2)
-            if is_canvas_running(socket_path):
-                print("[OpenComp] Canvas launched successfully")
-                return True
-        time.sleep(0.1)
-
-    print(f"[OpenComp] Canvas did not respond within {wait_for_socket}s")
-    return False
 
 
 # ── Blender Operator ────────────────────────────────────────────────────────

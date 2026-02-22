@@ -864,18 +864,9 @@ def _launch_qt_canvas():
     """
     try:
         from opencomp_core.qt_canvas.blender_launch import launch_canvas
-        from opencomp_core.qt_canvas.ipc.server import start_server, is_running
 
-        # Start IPC server if not already running
-        if not is_running():
-            start_server()
-            print("[OpenComp] IPC server started")
-
-        # Launch the Qt canvas
-        if launch_canvas():
-            print("[OpenComp] Qt canvas launched — this is your node editor")
-        else:
-            print("[OpenComp] Qt canvas failed to launch — using fallback Blender nodes")
+        # Launch the Qt canvas (non-blocking, fire and forget)
+        launch_canvas()
 
     except ImportError as e:
         print(f"[OpenComp] Qt canvas not available: {e}")
@@ -1250,7 +1241,9 @@ def _deferred_ui_setup():
         _set_window_title()
 
         # Auto-launch the Qt canvas (the primary node editor)
+        print("[OpenComp] About to launch Qt canvas...")
         _launch_qt_canvas()
+        print("[OpenComp] Qt canvas launch function returned")
 
         # Auto-save the configured layout as user startup so it persists
         try:
