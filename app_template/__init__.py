@@ -854,6 +854,37 @@ def _restore_quick_setup():
             pass
 
 
+# ── Qt Canvas Auto-Launch ──────────────────────────────────────────────
+
+def _launch_qt_canvas():
+    """Auto-launch the Qt canvas — the primary node editor for OpenComp.
+
+    The Qt canvas runs as a separate process and is THE node editor.
+    Blender's built-in node editor is only used as a fallback/sync target.
+    """
+    try:
+        from opencomp_core.qt_canvas.blender_launch import launch_canvas
+        from opencomp_core.qt_canvas.ipc.server import start_server, is_running
+
+        # Start IPC server if not already running
+        if not is_running():
+            start_server()
+            print("[OpenComp] IPC server started")
+
+        # Launch the Qt canvas
+        if launch_canvas():
+            print("[OpenComp] Qt canvas launched — this is your node editor")
+        else:
+            print("[OpenComp] Qt canvas failed to launch — using fallback Blender nodes")
+
+    except ImportError as e:
+        print(f"[OpenComp] Qt canvas not available: {e}")
+        print("[OpenComp] Install PySide6 and NodeGraphQt-QuiltiX-fork:")
+        print("           pip3 install PySide6 NodeGraphQt-QuiltiX-fork")
+    except Exception as e:
+        print(f"[OpenComp] Qt canvas launch error: {e}")
+
+
 # ── Window Title ───────────────────────────────────────────────────────
 
 def _set_window_title():
@@ -1217,6 +1248,9 @@ def _deferred_ui_setup():
 
         # Replace OS window title (best-effort, X11 only)
         _set_window_title()
+
+        # Auto-launch the Qt canvas (the primary node editor)
+        _launch_qt_canvas()
 
         # Auto-save the configured layout as user startup so it persists
         try:
