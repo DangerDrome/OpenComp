@@ -1,6 +1,6 @@
-<p align="center">
+<div align="center">
 
-# $${\Huge OpenComp}$$
+# OpenComp
   <p align="center">
     <strong>Open-source GPU compositor for VFX.</strong><br>
     Node-based. Color-managed. EXR-native. Cross-platform.
