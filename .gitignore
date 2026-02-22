@@ -1,0 +1,22 @@
+# Blender binary (user-extracted, not tracked)
+blender/
+
+# Test media (large EXR files)
+media/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Blender backups
+*.blend1
+*.blend2
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
