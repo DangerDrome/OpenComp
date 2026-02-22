@@ -1,5 +1,6 @@
 <p align="center">
-  <h1 align="center">OpenComp</h1>
+
+# $${\Huge OpenComp}$$
   <p align="center">
     <strong>Open-source GPU compositor for VFX.</strong><br>
     Node-based. Color-managed. EXR-native. Cross-platform.
