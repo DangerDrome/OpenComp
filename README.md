@@ -1,18 +1,14 @@
 <div align="center">
 
 # OpenComp
-  <p align="center">
-    <strong>Open-source GPU compositor for VFX.</strong><br>
-    Node-based. Color-managed. EXR-native. Cross-platform.
-  </p>
-  <p align="center">
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>
-    <img src="https://img.shields.io/badge/Python + GLSL-green.svg" alt="Python + GLSL">
-    <img src="https://img.shields.io/badge/Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" alt="Cross-platform">
-  </p>
-</p>
 
----
+**Open-source GPU compositor for VFX.**
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+![Python + GLSL](https://img.shields.io/badge/Python%20+%20GLSL-green.svg)
+![Linux | macOS | Windows](https://img.shields.io/badge/Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)
+
+</div>
 
 OpenComp is a node-based compositing application for visual effects work. GPU-accelerated, scene-linear, multi-format — built on OpenColorIO and OpenImageIO, the same libraries that power every major VFX tool.
 
