@@ -25,6 +25,8 @@ _OC_VERSION = "v0.4.0"
 _original_topbar_draw = None
 _original_view3d_header_draw = None
 _original_splash_draw = None
+_original_splash_about_draw = None
+_original_splash_quick_setup_draw = None
 
 
 # ── Custom Menus ─────────────────────────────────────────────────────────
@@ -119,6 +121,437 @@ class OC_MT_help(bpy.types.Menu):
         layout.operator("oc.splash_about", text="About OpenComp")
 
 
+class OC_OT_show_add_menu(bpy.types.Operator):
+    """Show the node add menu at cursor position."""
+    bl_idname = "oc.show_add_menu"
+    bl_label = "Add Node"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        space = context.space_data
+        return (space and space.type == 'NODE_EDITOR' and
+                space.tree_type == "OC_NT_compositor")
+
+    def invoke(self, context, event):
+        # Store cursor location for node placement
+        try:
+            view2d = context.region.view2d
+            loc = view2d.region_to_view(event.mouse_region_x, event.mouse_region_y)
+            context.space_data.cursor_location = loc
+        except:
+            pass
+        bpy.ops.wm.call_menu('INVOKE_DEFAULT', name="NODE_MT_add")
+        return {'FINISHED'}
+
+
+# ── Link Drag with Menu ────────────────────────────────────────────────
+# Custom link dragging that shows menu on release and keeps line visible
+
+import gpu
+from gpu_extras.batch import batch_for_shader
+
+# Global state for the link drag
+_link_drag = {
+    'active': False,
+    'source_socket': None,
+    'source_node': None,
+    'source_pos': (0, 0),
+    'end_pos': (0, 0),
+    'tree': None,
+    'draw_handler': None,
+    'waiting_for_menu': False,
+}
+
+
+def _get_socket_position(node, socket, is_output):
+    """Get the screen position of a socket."""
+    # Node location is the top-left corner
+    x = node.location.x
+    y = node.location.y
+
+    if is_output:
+        x += node.width
+
+    # Find socket index
+    sockets = node.outputs if is_output else node.inputs
+    idx = 0
+    for i, s in enumerate(sockets):
+        if s == socket:
+            idx = i
+            break
+
+    # Approximate Y position (sockets are below the header)
+    y -= 35 + (idx * 22)
+
+    return (x, y)
+
+
+def _draw_temp_link():
+    """Draw the temporary link line."""
+    state = _link_drag
+    if not state['active'] and not state['waiting_for_menu']:
+        return
+
+    start = state['source_pos']
+    end = state['end_pos']
+
+    # Create shader and batch for a line
+    shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+    gpu.state.blend_set('ALPHA')
+    gpu.state.line_width_set(2.0)
+
+    shader.bind()
+    shader.uniform_float("color", (1.0, 0.6, 0.2, 0.9))  # Orange link color
+    shader.uniform_float("lineWidth", 2.0)
+    shader.uniform_float("viewportSize", gpu.state.viewport_get()[2:])
+
+    # Draw bezier-ish curve (simplified as line segments)
+    points = []
+    segments = 20
+    dx = end[0] - start[0]
+
+    for i in range(segments + 1):
+        t = i / segments
+        # Bezier control points for a nice curve
+        cx1 = start[0] + dx * 0.4
+        cx2 = end[0] - dx * 0.4
+
+        # Cubic bezier
+        x = (1-t)**3 * start[0] + 3*(1-t)**2*t * cx1 + 3*(1-t)*t**2 * cx2 + t**3 * end[0]
+        y = (1-t)**3 * start[1] + 3*(1-t)**2*t * start[1] + 3*(1-t)*t**2 * end[1] + t**3 * end[1]
+        points.append((x, y))
+
+    batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": points})
+    batch.draw(shader)
+
+    gpu.state.blend_set('NONE')
+
+
+class OC_OT_link_drag(bpy.types.Operator):
+    """Drag to create link. Shows add menu when released in empty space."""
+    bl_idname = "oc.link_drag"
+    bl_label = "Link Drag"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    detach: bpy.props.BoolProperty(name="Detach", default=False)
+
+    @classmethod
+    def poll(cls, context):
+        space = context.space_data
+        return (space and space.type == 'NODE_EDITOR' and
+                space.tree_type == "OC_NT_compositor")
+
+    def invoke(self, context, event):
+        state = _link_drag
+        tree = context.space_data.edit_tree
+        if not tree:
+            return {'CANCELLED'}
+
+        # Find socket under cursor
+        socket, node, is_output = self._find_socket_at_cursor(context, event)
+        if not socket:
+            # No socket under cursor, use default behavior
+            return bpy.ops.node.link('INVOKE_DEFAULT', detach=self.detach)
+
+        # Initialize drag state
+        state['active'] = True
+        state['source_socket'] = socket
+        state['source_node'] = node
+        state['source_pos'] = _get_socket_position(node, socket, is_output)
+        state['end_pos'] = state['source_pos']
+        state['tree'] = tree
+        state['waiting_for_menu'] = False
+        state['is_output'] = is_output
+
+        # Add draw handler
+        if state['draw_handler'] is None:
+            state['draw_handler'] = bpy.types.SpaceNodeEditor.draw_handler_add(
+                _draw_temp_link, (), 'WINDOW', 'POST_VIEW'
+            )
+
+        context.window_manager.modal_handler_add(self)
+        context.area.tag_redraw()
+
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        state = _link_drag
+        context.area.tag_redraw()
+
+        if state['waiting_for_menu']:
+            # We're waiting for menu selection - pass through most events
+            # Only cancel on ESC
+            if event.type == 'ESC' and event.value == 'PRESS':
+                self._cleanup(context)
+                return {'CANCELLED'}
+
+            return {'PASS_THROUGH'}
+
+        # Update end position during drag
+        if event.type == 'MOUSEMOVE':
+            view2d = context.region.view2d
+            state['end_pos'] = view2d.region_to_view(event.mouse_region_x, event.mouse_region_y)
+
+        # Check for release
+        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            # Check if we're over another socket
+            target_socket, target_node, target_is_output = self._find_socket_at_cursor(context, event)
+
+            if target_socket and target_node != state['source_node']:
+                # Connect to this socket
+                tree = state['tree']
+                try:
+                    if state['is_output']:
+                        tree.links.new(state['source_socket'], target_socket)
+                    else:
+                        tree.links.new(target_socket, state['source_socket'])
+                except:
+                    pass
+                self._cleanup(context)
+                return {'FINISHED'}
+            else:
+                # Released in empty space - show menu, keep line visible
+                state['waiting_for_menu'] = True
+                state['active'] = False
+
+                # Store cursor position for new node
+                view2d = context.region.view2d
+                loc = view2d.region_to_view(event.mouse_region_x, event.mouse_region_y)
+                context.space_data.cursor_location = loc
+
+                # Store nodes before menu
+                self._nodes_before = set(n.name for n in state['tree'].nodes)
+
+                # Show the add menu
+                bpy.ops.wm.call_menu('INVOKE_DEFAULT', name="NODE_MT_add")
+
+                # Start checking for new node
+                bpy.app.timers.register(
+                    lambda: self._check_for_new_node(context),
+                    first_interval=0.05
+                )
+
+                return {'RUNNING_MODAL'}
+
+        # Cancel on right click or escape
+        if event.type in {'RIGHTMOUSE', 'ESC'}:
+            self._cleanup(context)
+            return {'CANCELLED'}
+
+        return {'RUNNING_MODAL'}
+
+    def _check_for_new_node(self, context):
+        """Timer to check if user selected a node from menu."""
+        state = _link_drag
+
+        # Increment check count for timeout
+        if not hasattr(self, '_menu_check_count'):
+            self._menu_check_count = 0
+        self._menu_check_count += 1
+
+        # Timeout after ~3 seconds (60 * 50ms)
+        if self._menu_check_count > 60 or not state['waiting_for_menu']:
+            self._cleanup(context)
+            return None
+
+        tree = state['tree']
+        if not tree:
+            self._cleanup(context)
+            return None
+
+        # Check for new node
+        for node in tree.nodes:
+            if node.name not in self._nodes_before:
+                # New node created - link it
+                self._create_link(state, node)
+                self._cleanup(context)
+                return None
+
+        # Keep checking
+        return 0.05
+
+    def _create_link(self, state, new_node):
+        """Create a link between source socket and new node."""
+        tree = state['tree']
+        socket = state['source_socket']
+
+        try:
+            if state['is_output']:
+                # Source is output, connect to new node's input
+                for inp in new_node.inputs:
+                    if inp.enabled:
+                        tree.links.new(socket, inp)
+                        break
+            else:
+                # Source is input, connect from new node's output
+                for out in new_node.outputs:
+                    if out.enabled:
+                        tree.links.new(out, socket)
+                        break
+        except Exception as e:
+            print(f"[OpenComp] Link creation failed: {e}")
+
+    def _cleanup(self, context):
+        """Clean up drag state and remove draw handler."""
+        state = _link_drag
+        state['active'] = False
+        state['waiting_for_menu'] = False
+        state['source_socket'] = None
+
+        if state['draw_handler']:
+            bpy.types.SpaceNodeEditor.draw_handler_remove(state['draw_handler'], 'WINDOW')
+            state['draw_handler'] = None
+
+        if context.area:
+            context.area.tag_redraw()
+
+    def _find_socket_at_cursor(self, context, event):
+        """Find socket under cursor. Returns (socket, node, is_output) or (None, None, None)."""
+        tree = context.space_data.edit_tree
+        if not tree:
+            return None, None, None
+
+        view2d = context.region.view2d
+        mx, my = view2d.region_to_view(event.mouse_region_x, event.mouse_region_y)
+
+        for node in tree.nodes:
+            loc = node.location
+
+            # Check outputs
+            for i, socket in enumerate(node.outputs):
+                if socket.enabled:
+                    sx = loc.x + node.width
+                    sy = loc.y - 35 - (i * 22)
+                    if abs(mx - sx) < 20 and abs(my - sy) < 15:
+                        return socket, node, True
+
+            # Check inputs
+            for i, socket in enumerate(node.inputs):
+                if socket.enabled:
+                    sx = loc.x
+                    sy = loc.y - 35 - (i * 22)
+                    if abs(mx - sx) < 20 and abs(my - sy) < 15:
+                        return socket, node, False
+
+        return None, None, None
+
+
+# ── Add and Link operator (Tab key workflow) ────────────────────────────
+# Track the last active node for Tab-based linking
+
+_last_active_node = None
+
+
+@persistent
+def _track_active_node(dummy):
+    """Track the active node for Tab key connection workflow."""
+    global _last_active_node
+    try:
+        for area in bpy.context.screen.areas:
+            if area.type == 'NODE_EDITOR':
+                for space in area.spaces:
+                    if space.type == 'NODE_EDITOR' and space.tree_type == "OC_NT_compositor":
+                        tree = space.edit_tree
+                        if tree and tree.nodes.active:
+                            _last_active_node = tree.nodes.active.name
+                        return
+    except:
+        pass
+
+
+class OC_OT_add_and_link(bpy.types.Operator):
+    """Show add menu and auto-connect to the active node's output."""
+    bl_idname = "oc.add_and_link"
+    bl_label = "Add and Link Node"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        space = context.space_data
+        return (space and space.type == 'NODE_EDITOR' and
+                space.tree_type == "OC_NT_compositor")
+
+    def invoke(self, context, event):
+        global _last_active_node
+        tree = context.space_data.edit_tree
+        if not tree:
+            return {'CANCELLED'}
+
+        # Store active node before menu
+        self._source_node_name = _last_active_node
+        self._nodes_before = set(n.name for n in tree.nodes)
+        self._tree = tree
+
+        # Store cursor position for new node placement
+        try:
+            view2d = context.region.view2d
+            loc = view2d.region_to_view(event.mouse_region_x, event.mouse_region_y)
+            context.space_data.cursor_location = loc
+        except:
+            pass
+
+        # Show add menu
+        bpy.ops.wm.call_menu('INVOKE_DEFAULT', name="NODE_MT_add")
+
+        # Start checking for new node
+        bpy.app.timers.register(
+            lambda: self._check_for_new_node(context),
+            first_interval=0.05
+        )
+
+        return {'FINISHED'}
+
+    def _check_for_new_node(self, context):
+        """Timer to check if user added a node from menu."""
+        tree = self._tree
+        if not tree:
+            return None
+
+        # Check for new node
+        for node in tree.nodes:
+            if node.name not in self._nodes_before:
+                # New node created - link it to active node's output
+                self._auto_link(tree, node)
+                return None
+
+        # Keep checking (up to ~2 seconds)
+        if not hasattr(self, '_check_count'):
+            self._check_count = 0
+        self._check_count += 1
+        if self._check_count > 40:
+            return None
+        return 0.05
+
+    def _auto_link(self, tree, new_node):
+        """Link new node's input to the source node's output."""
+        if not self._source_node_name:
+            return
+
+        source_node = tree.nodes.get(self._source_node_name)
+        if not source_node:
+            return
+
+        # Find first enabled output on source
+        source_socket = None
+        for out in source_node.outputs:
+            if out.enabled:
+                source_socket = out
+                break
+
+        if not source_socket:
+            return
+
+        # Find first enabled input on new node
+        for inp in new_node.inputs:
+            if inp.enabled:
+                try:
+                    tree.links.new(source_socket, inp)
+                except:
+                    pass
+                break
+
+
 _menu_classes = [
     OC_MT_file,
     OC_MT_edit,
@@ -128,6 +561,9 @@ _menu_classes = [
 
 _operator_classes = [
     OC_OT_splash_about,
+    OC_OT_show_add_menu,
+    OC_OT_link_drag,
+    OC_OT_add_and_link,
 ]
 
 
@@ -340,6 +776,80 @@ def _restore_splash():
         try:
             bpy.types.WM_MT_splash.draw = _original_splash_draw
             _original_splash_draw = None
+        except Exception:
+            pass
+
+
+# ── Splash About Override ──────────────────────────────────────────────
+
+def _opencomp_splash_about_draw(self, context):
+    """Replace Blender's splash about with OpenComp branding."""
+    layout = self.layout
+
+    # OpenComp branding instead of Blender logo
+    col = layout.column(align=True)
+    col.scale_y = 1.5
+    col.label(text="OpenComp", icon='NODE_COMPOSITING')
+    col.label(text=_OC_VERSION)
+
+    layout.separator()
+
+    col = layout.column(align=True)
+    col.label(text="Open Source VFX Compositor")
+    col.label(text="GPU-accelerated  |  OCIO colour  |  OIIO I/O")
+
+    layout.separator()
+
+
+def _override_splash_about():
+    """Replace WM_MT_splash_about draw with OpenComp version."""
+    global _original_splash_about_draw
+    try:
+        cls = bpy.types.WM_MT_splash_about
+        _original_splash_about_draw = cls.draw
+        cls.draw = _opencomp_splash_about_draw
+    except Exception as e:
+        print(f"[OpenComp] Splash about override skipped: {e}")
+
+
+def _restore_splash_about():
+    """Restore original WM_MT_splash_about draw function."""
+    global _original_splash_about_draw
+    if _original_splash_about_draw is not None:
+        try:
+            bpy.types.WM_MT_splash_about.draw = _original_splash_about_draw
+            _original_splash_about_draw = None
+        except Exception:
+            pass
+
+
+# ── Quick Setup Override ───────────────────────────────────────────────
+
+def _opencomp_quick_setup_draw(self, context):
+    """Replace Blender's Quick Setup with nothing — OpenComp needs no setup."""
+    # Empty draw — no quick setup needed for OpenComp
+    # User just sees the splash with recent files, no configuration wizard
+    pass
+
+
+def _override_quick_setup():
+    """Replace WM_MT_splash_quick_setup draw with empty version."""
+    global _original_splash_quick_setup_draw
+    try:
+        cls = bpy.types.WM_MT_splash_quick_setup
+        _original_splash_quick_setup_draw = cls.draw
+        cls.draw = _opencomp_quick_setup_draw
+    except Exception as e:
+        print(f"[OpenComp] Quick setup override skipped: {e}")
+
+
+def _restore_quick_setup():
+    """Restore original WM_MT_splash_quick_setup draw function."""
+    global _original_splash_quick_setup_draw
+    if _original_splash_quick_setup_draw is not None:
+        try:
+            bpy.types.WM_MT_splash_quick_setup.draw = _original_splash_quick_setup_draw
+            _original_splash_quick_setup_draw = None
         except Exception:
             pass
 
@@ -803,8 +1313,8 @@ def _setup_keymaps():
         kmi.properties.type = node_type
         kmi.properties.use_transform = True
 
-    # Tab — add Constant (useful "dot" node like Nuke)
-    kmi = km.keymap_items.new('node.add_node', 'TAB', 'PRESS')
+    # Period — add Constant (dot node, like Nuke's "." shortcut)
+    kmi = km.keymap_items.new('node.add_node', 'PERIOD', 'PRESS')
     kmi.properties.type = 'OC_N_constant'
     kmi.properties.use_transform = True
 
@@ -822,8 +1332,11 @@ def _setup_keymaps():
     km_nav = kc.keymaps.new(name='Node Editor', space_type='NODE_EDITOR')
     _oc_keymaps.append(km_nav)
 
-    # Click select (extend with Shift)
-    km_nav.keymap_items.new('node.select', 'LEFTMOUSE', 'PRESS')
+    # Click select (deselect_all=True means clicking empty space deselects)
+    kmi = km_nav.keymap_items.new('node.select', 'LEFTMOUSE', 'PRESS')
+    kmi.properties.deselect_all = True
+
+    # Shift+click to extend selection
     kmi = km_nav.keymap_items.new('node.select', 'LEFTMOUSE', 'PRESS', shift=True)
     kmi.properties.extend = True
 
@@ -841,13 +1354,22 @@ def _setup_keymaps():
     # Move nodes by dragging (must be on selected nodes)
     km_nav.keymap_items.new('node.translate_attach', 'LEFTMOUSE', 'CLICK_DRAG')
 
-    # Link sockets by dragging from them
-    km_nav.keymap_items.new('node.link', 'LEFTMOUSE', 'CLICK_DRAG')
+    # Link sockets by dragging with custom operator (shows menu on release in empty space)
+    kmi = km_nav.keymap_items.new('oc.link_drag', 'LEFTMOUSE', 'CLICK_DRAG')
+    kmi.properties.detach = False
 
-    # Cut links (Ctrl+Right drag)
-    km_nav.keymap_items.new('node.links_cut', 'RIGHTMOUSE', 'PRESS', ctrl=True)
+    # Ctrl+drag to detach existing links while dragging
+    kmi = km_nav.keymap_items.new('oc.link_drag', 'LEFTMOUSE', 'CLICK_DRAG', ctrl=True)
+    kmi.properties.detach = True
 
-    # Detach links
+    # Tab to show add menu and auto-connect to active node
+    # Workflow: select node -> Tab -> choose node -> new node is connected
+    km_nav.keymap_items.new('oc.add_and_link', 'TAB', 'PRESS')
+
+    # Cut links (Ctrl+Right mouse drag)
+    km_nav.keymap_items.new('node.links_cut', 'RIGHTMOUSE', 'CLICK_DRAG', ctrl=True)
+
+    # Detach links (Alt+drag)
     km_nav.keymap_items.new('node.links_detach', 'LEFTMOUSE', 'CLICK_DRAG', alt=True)
 
     # ── Context menu ──────────────────────────────────────────────────
@@ -903,24 +1425,36 @@ def _setup_keymaps():
 
 
 def _clear_default_node_keymaps():
-    """Disable all default Blender Node Editor keymaps.
+    """Disable conflicting default Blender Node Editor keymaps.
 
     We disable rather than delete because the default keyconfig is read-only.
     Our addon keymaps take priority over disabled default ones.
+
+    We keep link-related keymaps enabled for proper drag-to-menu behavior.
     """
     wm = bpy.context.window_manager
     kc = wm.keyconfigs.default
     if kc is None:
         return
 
+    # Keymaps to keep enabled for proper node editor functionality
+    keep_enabled = {
+        'node.link',           # Link dragging + popup menu on release
+        'node.link_make',      # Making links
+        'node.link_viewer',    # Connect to viewer
+        'node.links_cut',      # Cutting links
+        'node.links_detach',   # Detaching links
+        'node.links_mute',     # Muting links
+    }
+
     count = 0
     for km in kc.keymaps:
         if km.space_type == 'NODE_EDITOR':
             for kmi in km.keymap_items:
-                if kmi.active:
+                if kmi.active and kmi.idname not in keep_enabled:
                     kmi.active = False
                     count += 1
-    print(f"[OpenComp] Disabled {count} default Node Editor shortcuts")
+    print(f"[OpenComp] Disabled {count} default Node Editor shortcuts (kept link operators)")
 
 
 def _restore_default_node_keymaps():
@@ -970,6 +1504,8 @@ def register():
     _override_topbar()
     _override_view3d_header()
     _override_splash()
+    _override_splash_about()
+    _override_quick_setup()
     _apply_dark_theme()
     _clear_default_node_keymaps()
     _setup_keymaps()
@@ -988,6 +1524,10 @@ def register():
     if _configure_ui_on_load not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_configure_ui_on_load)
 
+    # Handler to track active node for Tab connection
+    if _track_active_node not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(_track_active_node)
+
     print("[OpenComp] App template registered")
 
 
@@ -997,6 +1537,8 @@ def unregister():
     _restore_topbar()
     _restore_view3d_header()
     _restore_splash()
+    _restore_splash_about()
+    _restore_quick_setup()
     _restore_builtin_scene_panels()
 
     if _configure_ui_on_load in bpy.app.handlers.load_factory_startup_post:
@@ -1004,6 +1546,9 @@ def unregister():
 
     if _configure_ui_on_load in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_configure_ui_on_load)
+
+    if _track_active_node in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(_track_active_node)
 
     # Unregister menu classes
     for cls in reversed(_menu_classes):
