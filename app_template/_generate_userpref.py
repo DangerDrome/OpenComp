@@ -25,7 +25,7 @@ def _configure_preferences():
     prefs.inputs.use_zoom_to_mouse = True
 
     # View
-    prefs.view.show_splash = True  # We override the splash content anyway
+    prefs.view.show_splash = False  # Disabled for now (dismissal not working)
     prefs.view.show_developer_ui = False
 
     # Theme - dark

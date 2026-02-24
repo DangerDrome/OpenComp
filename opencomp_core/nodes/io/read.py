@@ -5,7 +5,32 @@ Outputs: Image (RGBA32F, linear scene-referred)
 """
 
 import bpy
+from bpy.types import Operator
+from bpy_extras.io_utils import ImportHelper
 from ..base import OpenCompNode
+
+
+class OC_OT_read_browse(Operator, ImportHelper):
+    """Browse for image file"""
+    bl_idname = "oc.read_browse"
+    bl_label = "Browse Image"
+
+    node_name: bpy.props.StringProperty()
+
+    filter_glob: bpy.props.StringProperty(
+        default="*.exr;*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.hdr;*.dpx;*.cin",
+        options={'HIDDEN'},
+    )
+
+    def execute(self, context):
+        # Find the node and set filepath
+        for tree in bpy.data.node_groups:
+            if tree.bl_idname == "OC_NT_compositor":
+                node = tree.nodes.get(self.node_name)
+                if node:
+                    node.filepath = self.filepath
+                    break
+        return {'FINISHED'}
 
 
 # Cache: {node_name: (resolved_path, GPUTexture)} — avoids re-reading
@@ -17,8 +42,14 @@ def _on_prop_update(self, context):
     """Trigger graph re-evaluation when filepath changes."""
     # Invalidate cache for this node so it re-reads
     _read_cache.pop(self.name, None)
+    # Also invalidate thumbnail cache
+    _thumbnail_cache.pop(self.name, None)
     from ...node_graph.tree import request_evaluate
     request_evaluate()
+
+
+# Thumbnail cache: {node_name: bpy.types.Image}
+_thumbnail_cache = {}
 
 
 class ReadNode(OpenCompNode):
@@ -32,14 +63,72 @@ class ReadNode(OpenCompNode):
         name="File", subtype='FILE_PATH', default="",
         update=_on_prop_update,
     )
+    show_thumbnail: bpy.props.BoolProperty(
+        name="Show Thumbnail", default=False,
+        description="Display a preview thumbnail of the image",
+    )
 
     _output_texture = None
 
     def init(self, context):
+        super().init(context)
         self.outputs.new("OC_NS_image", "Image")
 
+    def _get_thumbnail(self):
+        """Get or create a Blender image for thumbnail preview."""
+        if not self.filepath:
+            return None
+
+        resolved = bpy.path.abspath(self.filepath)
+
+        # Check cache
+        cached = _thumbnail_cache.get(self.name)
+        if cached and cached[0] == resolved:
+            img = cached[1]
+            # Ensure preview is available
+            if img and img.preview:
+                return img
+            return None
+
+        # Load image into Blender for preview
+        try:
+            import os
+            if not os.path.exists(resolved):
+                return None
+
+            # Use a unique name based on node name to avoid conflicts
+            img_name = f"_oc_thumb_{self.name}"
+
+            # Remove old image if exists
+            if img_name in bpy.data.images:
+                bpy.data.images.remove(bpy.data.images[img_name])
+
+            # Load new image
+            img = bpy.data.images.load(resolved)
+            img.name = img_name
+
+            # Ensure preview is generated
+            img.preview_ensure()
+
+            _thumbnail_cache[self.name] = (resolved, img)
+            return img
+        except Exception as e:
+            print(f"[OpenComp] Could not load thumbnail: {e}")
+            return None
+
     def draw_buttons(self, context, layout):
-        layout.prop(self, "filepath")
+        # File path - FILE_PATH subtype automatically adds browse button
+        layout.prop(self, "filepath", text="")
+
+        # Thumbnail toggle
+        row = layout.row()
+        row.prop(self, "show_thumbnail", icon='IMAGE_DATA', text="")
+
+        # Show thumbnail if enabled
+        if self.show_thumbnail and self.filepath:
+            img = self._get_thumbnail()
+            if img:
+                layout.template_icon(icon_value=img.preview.icon_id, scale=5.0)
 
     def evaluate(self, texture_pool):
         """Read image file → RGBA32F GPUTexture."""
@@ -115,11 +204,26 @@ class ReadNode(OpenCompNode):
 
 
 def register():
+    bpy.utils.register_class(OC_OT_read_browse)
     bpy.utils.register_class(ReadNode)
 
 
 def unregister():
+    # Clean up thumbnail images
+    for name, (_, img) in list(_thumbnail_cache.items()):
+        try:
+            if img and img.name in bpy.data.images:
+                bpy.data.images.remove(img)
+        except Exception:
+            pass
+    _thumbnail_cache.clear()
+    _read_cache.clear()
+
     try:
         bpy.utils.unregister_class(ReadNode)
+    except RuntimeError:
+        pass
+    try:
+        bpy.utils.unregister_class(OC_OT_read_browse)
     except RuntimeError:
         pass

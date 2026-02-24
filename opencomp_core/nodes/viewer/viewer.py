@@ -198,6 +198,11 @@ def _compile_viewer_shader():
 
 def _draw_viewer_callback():
     """Draw handler — renders viewer texture with display controls + HUD."""
+    # Only draw in VIEW_3D areas
+    context = bpy.context
+    if context.area is None or context.area.type != 'VIEW_3D':
+        return
+
     tex = _viewer_state.get("texture")
     if tex is None:
         return
@@ -367,6 +372,7 @@ class ViewerNode(OpenCompNode):
     bl_icon = "HIDE_OFF"
 
     def init(self, context):
+        super().init(context)
         self.inputs.new("OC_NS_image", "Image")
 
     def evaluate(self, texture_pool):

@@ -47,7 +47,7 @@ def _draw_topbar_overlay():
 
     # OpenComp logo/name
     blf.size(0, 15)
-    blf.color(0, 0.9, 0.55, 0.2, 1.0)  # Orange
+    blf.color(0, 0.3, 0.8, 0.45, 1.0)  # Green
     blf.position(0, x, y, 0)
     blf.draw(0, "OpenComp")
     x += 100
@@ -286,10 +286,14 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    # Register draw handler for topbar
-    _topbar_draw_handler = bpy.types.SpaceTopBar.draw_handler_add(
-        _draw_topbar_overlay, (), 'WINDOW', 'POST_PIXEL'
-    )
+    # Register draw handler for topbar (if available)
+    try:
+        _topbar_draw_handler = bpy.types.SpaceTopBar.draw_handler_add(
+            _draw_topbar_overlay, (), 'WINDOW', 'POST_PIXEL'
+        )
+    except AttributeError:
+        # SpaceTopBar not available in this Blender version
+        _topbar_draw_handler = None
 
     # Unregister default topbar
     try:

@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from typing import Optional, Set, Tuple, List
 import math
 
+# Port positioning constant (must match renderer.py)
+PORT_GAP = 14  # Gap between port center and node edge
+
 
 @dataclass
 class NodeVisual:
@@ -15,9 +18,12 @@ class NodeVisual:
     x: float = 0.0
     y: float = 0.0
     width: float = 140.0
-    height: float = 80.0
+    height: float = 32.0  # Default to collapsed height (matches NODE_HEADER_HEIGHT)
     color: Tuple[float, float, float] = (0.3, 0.3, 0.3)
     selected: bool = False
+    collapsed: bool = True  # Nodes start collapsed by default
+    label: str = ""  # Node type label (e.g., "Read", "Grade")
+    node_type: str = ""  # Node bl_idname for icon lookup
 
     # Computed port positions (updated by renderer)
     input_ports: List[Tuple[float, float]] = field(default_factory=list)
@@ -65,8 +71,24 @@ class CanvasState:
         self.link_end_x: float = 0.0
         self.link_end_y: float = 0.0
 
+        # Add node state - position for newly added nodes
+        self.add_node_location: Optional[Tuple[float, float]] = None
+        self._known_nodes: Set[str] = set()  # Track known node names
+
+        # Pending link state - for auto-connecting after drag-to-empty-space
+        self.pending_link_node: Optional[str] = None
+        self.pending_link_port: int = -1
+        self.pending_link_is_output: bool = True
+
         # Node visuals cache (synced from bpy nodes)
         self.node_visuals: dict[str, NodeVisual] = {}
+
+        # Drag cut state (X or Y key + drag to cut links)
+        self.is_drag_cutting: bool = False
+        self.drag_cut_start_x: float = 0.0
+        self.drag_cut_start_y: float = 0.0
+        self.drag_cut_end_x: float = 0.0
+        self.drag_cut_end_y: float = 0.0
 
         # Draw handler reference
         self._draw_handler = None
@@ -114,14 +136,15 @@ class CanvasState:
             return
 
         # Find bounding box
+        # nv.y is bottom-left, so node spans y: [nv.y, nv.y + height]
         min_x = min_y = float('inf')
         max_x = max_y = float('-inf')
 
         for nv in self.node_visuals.values():
             min_x = min(min_x, nv.x)
-            min_y = min(min_y, nv.y - nv.height)
+            min_y = min(min_y, nv.y)
             max_x = max(max_x, nv.x + nv.width)
-            max_y = max(max_y, nv.y)
+            max_y = max(max_y, nv.y + nv.height)
 
         if min_x == float('inf'):
             return
@@ -150,25 +173,60 @@ class CanvasState:
     def hit_test_node(self, cx: float, cy: float) -> Optional[str]:
         """Find node at canvas coordinates. Returns node name or None."""
         # Check in reverse order (top-most first)
+        # In Blender, node.location is bottom-left, so node spans:
+        # x: [nv.x, nv.x + width]
+        # y: [nv.y, nv.y + height] (Y increases upward)
         for name, nv in reversed(list(self.node_visuals.items())):
-            if (nv.x <= cx <= nv.x + nv.width and
-                nv.y - nv.height <= cy <= nv.y):
+            # Special handling for reroute nodes - use circular hit test
+            if nv.node_type == 'OC_N_reroute':
+                center_x = nv.x + nv.width / 2
+                center_y = nv.y + nv.height / 2
+                # Use radius of 18 (slightly larger than visual 10) for easier clicking
+                if math.hypot(cx - center_x, cy - center_y) <= 18:
+                    return name
+            elif (nv.x <= cx <= nv.x + nv.width and
+                  nv.y <= cy <= nv.y + nv.height):
                 return name
         return None
 
     def hit_test_port(self, cx: float, cy: float,
-                      radius: float = 8.0) -> Optional[Tuple[str, int, bool]]:
+                      radius: float = 18.0) -> Optional[Tuple[str, int, bool]]:
         """Find port at canvas coordinates. Returns (node_name, port_index, is_output) or None."""
         for name, nv in self.node_visuals.items():
-            # Check output ports (bottom of node in top-to-bottom flow)
-            for i, (px, py) in enumerate(nv.output_ports):
-                if math.hypot(cx - px, cy - py) <= radius:
-                    return (name, i, True)
+            # Special handling for reroute nodes - ports are centered
+            if nv.node_type == 'OC_N_reroute':
+                center_x = nv.x + nv.width / 2
+                center_y = nv.y + nv.height / 2
+                # Output port below center
+                if math.hypot(cx - center_x, cy - (center_y - PORT_GAP)) <= radius:
+                    return (name, 0, True)
+                # Input port above center
+                if math.hypot(cx - center_x, cy - (center_y + PORT_GAP)) <= radius:
+                    return (name, 0, False)
+                continue
 
-            # Check input ports (top of node)
-            for i, (px, py) in enumerate(nv.input_ports):
-                if math.hypot(cx - px, cy - py) <= radius:
-                    return (name, i, False)
+            # Calculate port positions inline (they may not be updated yet)
+            # nv.y is bottom-left, so top = nv.y + height, bottom = nv.y
+            # Ports are offset by PORT_GAP from node edges
+            # Respect actual port counts (don't force minimum of 1)
+            num_inputs = len(nv.input_ports)
+            num_outputs = len(nv.output_ports)
+
+            # Check output ports (below node with gap)
+            if num_outputs > 0:
+                for i in range(num_outputs):
+                    px = nv.x + (i + 1) * nv.width / (num_outputs + 1)
+                    py = nv.y - PORT_GAP  # Below node
+                    if math.hypot(cx - px, cy - py) <= radius:
+                        return (name, i, True)
+
+            # Check input ports (above node with gap)
+            if num_inputs > 0:
+                for i in range(num_inputs):
+                    px = nv.x + (i + 1) * nv.width / (num_inputs + 1)
+                    py = nv.y + nv.height + PORT_GAP  # Above node
+                    if math.hypot(cx - px, cy - py) <= radius:
+                        return (name, i, False)
 
         return None
 
@@ -200,13 +258,190 @@ class CanvasState:
 
         for name, nv in self.node_visuals.items():
             # Check if node intersects box
+            # Node spans x: [nv.x, nv.x + width], y: [nv.y, nv.y + height]
             if (nv.x + nv.width >= min_x and nv.x <= max_x and
-                nv.y >= min_y and nv.y - nv.height <= max_y):
+                nv.y + nv.height >= min_y and nv.y <= max_y):
                 self.selected_nodes.add(name)
 
         # Update visuals
         for name, nv in self.node_visuals.items():
             nv.selected = name in self.selected_nodes
+
+
+# Node type to color mapping (Nuke-style)
+NODE_COLORS = {
+    # Input nodes - green tint
+    'OC_N_read': (0.2, 0.4, 0.25),
+    'OC_N_constant': (0.2, 0.35, 0.25),
+    # Output nodes - purple tint
+    'OC_N_write': (0.35, 0.2, 0.4),
+    'OC_N_viewer': (0.3, 0.2, 0.35),
+    # Color nodes - orange/warm tint
+    'OC_N_grade': (0.4, 0.3, 0.2),
+    'OC_N_cdl': (0.4, 0.28, 0.2),
+    # Merge nodes - blue tint
+    'OC_N_over': (0.2, 0.3, 0.4),
+    'OC_N_merge': (0.2, 0.28, 0.38),
+    'OC_N_shuffle': (0.25, 0.3, 0.4),
+    # Filter nodes - cyan tint
+    'OC_N_blur': (0.2, 0.35, 0.4),
+    'OC_N_sharpen': (0.2, 0.38, 0.4),
+    # Transform nodes - yellow tint
+    'OC_N_transform': (0.4, 0.38, 0.2),
+    'OC_N_crop': (0.38, 0.35, 0.2),
+    # Utility nodes - neutral gray
+    'OC_N_reroute': (0.35, 0.35, 0.35),
+}
+DEFAULT_NODE_COLOR = (0.3, 0.3, 0.3)
+
+
+def sync_from_tree(state: 'CanvasState', tree) -> List[LinkVisual]:
+    """Sync canvas state from a Blender node tree.
+
+    Args:
+        state: The canvas state to update
+        tree: A bpy.types.NodeTree (OC_NT_compositor)
+
+    Returns:
+        List of LinkVisual for all connections
+    """
+    if tree is None:
+        state.node_visuals.clear()
+        state._known_nodes.clear()
+        return []
+
+    # Track which nodes still exist
+    existing_names = set()
+
+    # Detect new nodes and reposition them if we have an add_node_location
+    current_node_names = {node.name for node in tree.nodes}
+    new_nodes = current_node_names - state._known_nodes
+
+    if new_nodes and state.add_node_location:
+        for node in tree.nodes:
+            if node.name in new_nodes:
+                # Position new node at the stored cursor location
+                node.location.x = state.add_node_location[0]
+                node.location.y = state.add_node_location[1]
+        # Clear the add location after using it
+        state.add_node_location = None
+
+    # Update known nodes
+    state._known_nodes = current_node_names
+
+    for node in tree.nodes:
+        existing_names.add(node.name)
+
+        # Get or create visual for this node
+        if node.name in state.node_visuals:
+            nv = state.node_visuals[node.name]
+        else:
+            nv = NodeVisual(node_name=node.name)
+            state.node_visuals[node.name] = nv
+
+        # Sync position - use Blender's coordinates directly
+        # node.location is the top-left corner of the node
+        # No Y flip needed - we use Blender's coordinate system
+        nv.x = node.location.x
+        nv.y = node.location.y
+
+        # Sync dimensions and collapsed state
+        nv.width = max(node.width, 140)
+        nv.collapsed = getattr(node, 'hide', True)  # Blender's node.hide = collapsed
+        if nv.collapsed:
+            nv.height = 32  # Just the header (matches NODE_HEADER_HEIGHT)
+        else:
+            nv.height = max(node.height, 80) if hasattr(node, 'height') else 80
+
+        # Sync color based on node type
+        nv.color = NODE_COLORS.get(node.bl_idname, DEFAULT_NODE_COLOR)
+
+        # Sync label from node's editable label property (only show if user set one)
+        nv.label = getattr(node, 'label', '')
+
+        # Sync node type for icon lookup
+        nv.node_type = node.bl_idname
+
+        # Sync selection
+        nv.selected = node.select
+
+        # Count inputs/outputs for port rendering (respect 0 for nodes without ports)
+        num_inputs = len([s for s in node.inputs if s.enabled])
+        num_outputs = len([s for s in node.outputs if s.enabled])
+        nv.input_ports = [(0, 0)] * num_inputs
+        nv.output_ports = [(0, 0)] * num_outputs
+
+    # Remove visuals for deleted nodes
+    for name in list(state.node_visuals.keys()):
+        if name not in existing_names:
+            del state.node_visuals[name]
+
+    # Update active node
+    if tree.nodes.active:
+        state.active_node = tree.nodes.active.name
+    else:
+        state.active_node = None
+
+    # Sync selected_nodes set
+    state.selected_nodes = {name for name in existing_names
+                           if state.node_visuals.get(name, NodeVisual("")).selected}
+
+    # Build link visuals from actual connections
+    links = []
+    for node in tree.nodes:
+        for out_idx, output in enumerate(node.outputs):
+            if not output.enabled:
+                continue
+            for link in output.links:
+                if link.to_node and link.to_socket:
+                    # Find input index
+                    to_idx = 0
+                    for i, inp in enumerate(link.to_node.inputs):
+                        if inp == link.to_socket:
+                            to_idx = i
+                            break
+                    links.append(LinkVisual(
+                        from_node=node.name,
+                        from_port=out_idx,
+                        to_node=link.to_node.name,
+                        to_port=to_idx
+                    ))
+
+    return links
+
+
+def write_node_positions_to_tree(state: 'CanvasState', tree):
+    """Write node positions from canvas state back to Blender node tree.
+
+    Args:
+        state: The canvas state with updated positions
+        tree: A bpy.types.NodeTree (OC_NT_compositor)
+    """
+    if tree is None:
+        return
+
+    for node in tree.nodes:
+        if node.name in state.node_visuals:
+            nv = state.node_visuals[node.name]
+            # Direct mapping - no coordinate conversion needed
+            node.location.x = nv.x
+            node.location.y = nv.y
+
+
+def write_selection_to_tree(state: 'CanvasState', tree):
+    """Write selection state from canvas back to Blender node tree.
+
+    Args:
+        state: The canvas state with selection info
+        tree: A bpy.types.NodeTree (OC_NT_compositor)
+    """
+    if tree is None:
+        return
+
+    for node in tree.nodes:
+        node.select = node.name in state.selected_nodes
+        if node.name == state.active_node:
+            tree.nodes.active = node
 
 
 # Global canvas state (one per Blender session for now)

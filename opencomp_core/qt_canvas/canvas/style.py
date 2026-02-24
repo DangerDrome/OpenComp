@@ -13,19 +13,19 @@ STYLE = {
     # Node appearance
     'node_bg_color': (50, 50, 50),
     'node_border_color': (60, 60, 60),
-    'node_selected_border_color': (255, 165, 0),  # Orange selection
+    'node_selected_border_color': (76, 204, 115),  # Green selection
     'node_text_color': (200, 200, 200),
     'node_header_color': (70, 70, 70),
 
     # Port/socket appearance
     'port_color': (160, 160, 160),
     'port_hover_color': (200, 200, 200),
-    'port_active_color': (255, 165, 0),
+    'port_active_color': (76, 204, 115),
 
     # Pipe/wire appearance
     'pipe_color': (160, 160, 160),
-    'pipe_selected_color': (255, 165, 0),
-    'pipe_active_color': (255, 200, 100),
+    'pipe_selected_color': (76, 204, 115),
+    'pipe_active_color': (102, 230, 140),
     'pipe_disabled_color': (80, 80, 80),
 
     # Backdrop (frame) appearance

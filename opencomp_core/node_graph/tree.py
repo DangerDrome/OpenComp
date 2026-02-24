@@ -8,6 +8,7 @@ in topological order, calling each node's evaluate().
 
 import bpy
 from .evaluator import topological_sort, CycleDetectedError
+from ..gpu_pipeline.texture_pool import TexturePool
 
 
 # ── Texture cache ─────────────────────────────────────────────────────
@@ -46,10 +47,13 @@ def _evaluate_tree(tree):
         print("[OpenComp] Cycle detected — evaluation skipped")
         return
 
+    # Create texture pool for this evaluation pass
+    pool = TexturePool()
+
     for node_name in order:
         node = node_map[node_name]
         try:
-            result = node.evaluate(None)
+            result = node.evaluate(pool)
             _node_textures[node_name] = result
         except NotImplementedError:
             pass
@@ -67,10 +71,10 @@ def _persistent_eval_timer():
                 if tree.bl_idname == "OC_NT_compositor":
                     _evaluate_tree(tree)
 
-            # Tag VIEW_3D areas for redraw so the viewer picks up new texture
+            # Tag areas for redraw so the viewer and properties update
             for window in bpy.context.window_manager.windows:
                 for area in window.screen.areas:
-                    if area.type == 'VIEW_3D':
+                    if area.type in ('VIEW_3D', 'PROPERTIES', 'NODE_EDITOR'):
                         area.tag_redraw()
         except Exception as e:
             print(f"[OpenComp] Evaluation error: {e}")
@@ -93,6 +97,20 @@ class OpenCompNodeTree(bpy.types.NodeTree):
     bl_label = "OpenComp Compositor"
     bl_icon = "NODE_COMPOSITING"
 
+    # Connection line style
+    connection_style: bpy.props.EnumProperty(
+        name="Connection Style",
+        description="Visual style for node connections",
+        items=[
+            ('BEZIER', "Bezier", "Classic smooth bezier curves"),
+            ('STRAIGHT', "Straight", "Direct straight lines"),
+            ('DIRECTIONAL', "Directional", "Bezier that follows connection direction"),
+            ('STEP', "Step", "Right-angle orthogonal lines"),
+            ('SMOOTH_STEP', "Smooth Step", "Right-angles with rounded corners"),
+        ],
+        default='BEZIER'
+    )
+
     def update(self):
         """Called on link/node changes. Flag for deferred evaluation."""
         global _eval_needed
@@ -100,7 +118,12 @@ class OpenCompNodeTree(bpy.types.NodeTree):
 
 
 def register():
-    bpy.utils.register_class(OpenCompNodeTree)
+    # Guard against double registration
+    try:
+        bpy.utils.register_class(OpenCompNodeTree)
+    except ValueError:
+        pass  # Already registered
+
     # Start persistent evaluation timer in GUI mode
     global _timer_running
     if not bpy.app.background and not _timer_running:

@@ -30,6 +30,7 @@ class WriteNode(OpenCompNode):
     )
 
     def init(self, context):
+        super().init(context)
         self.inputs.new("OC_NS_image", "Image")
 
     def draw_buttons(self, context, layout):

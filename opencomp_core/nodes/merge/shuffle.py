@@ -36,6 +36,7 @@ class ShuffleNode(OpenCompNode):
     _output_texture = None
 
     def init(self, context):
+        super().init(context)
         self.inputs.new("OC_NS_image", "Image")
         self.outputs.new("OC_NS_image", "Image")
 

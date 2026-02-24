@@ -101,11 +101,34 @@ def _restore_node_context_menu():
 
 # ── Active Node Properties panel (appears in PROPERTIES area) ──────────
 
+def _find_active_oc_node():
+    """Find the active node from any OpenComp tree."""
+    # Check all node groups
+    for tree in bpy.data.node_groups:
+        if tree.bl_idname == "OC_NT_compositor" and tree.nodes.active:
+            return tree.nodes.active
+
+    # Also check node editor spaces directly
+    try:
+        for window in bpy.context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'NODE_EDITOR':
+                    for space in area.spaces:
+                        if space.type == 'NODE_EDITOR' and space.tree_type == "OC_NT_compositor":
+                            tree = space.node_tree
+                            if tree and tree.nodes.active:
+                                return tree.nodes.active
+    except Exception:
+        pass
+
+    return None
+
+
 class OC_PT_active_node(bpy.types.Panel):
     """Node header — name and label (mirrors Node Editor sidebar)."""
 
     bl_idname = "OC_PT_active_node"
-    bl_label = "Node"
+    bl_label = "Active Node"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = 'scene'
@@ -113,24 +136,19 @@ class OC_PT_active_node(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return True
-
-    def _get_active_node(self):
-        for tree in bpy.data.node_groups:
-            if tree.bl_idname == "OC_NT_compositor" and tree.nodes.active:
-                return tree.nodes.active
-        return None
+        return _find_active_oc_node() is not None
 
     def draw(self, context):
         layout = self.layout
-        node = self._get_active_node()
+        node = _find_active_oc_node()
         if node is None:
             layout.label(text="Select a node", icon='NODE')
             return
 
         col = layout.column()
         col.prop(node, "name", icon=node.bl_icon)
-        col.prop(node, "label")
+        if hasattr(node, "label"):
+            col.prop(node, "label")
 
 
 class OC_PT_active_node_properties(bpy.types.Panel):
@@ -141,22 +159,19 @@ class OC_PT_active_node_properties(bpy.types.Panel):
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = 'scene'
+    bl_parent_id = "OC_PT_active_node"
     bl_order = 1
 
     @classmethod
     def poll(cls, context):
-        for tree in bpy.data.node_groups:
-            if tree.bl_idname == "OC_NT_compositor" and tree.nodes.active:
-                if hasattr(tree.nodes.active, 'draw_buttons'):
-                    return True
-        return False
+        node = _find_active_oc_node()
+        return node is not None and hasattr(node, 'draw_buttons')
 
     def draw(self, context):
         layout = self.layout
-        for tree in bpy.data.node_groups:
-            if tree.bl_idname == "OC_NT_compositor" and tree.nodes.active:
-                tree.nodes.active.draw_buttons(context, layout)
-                break
+        node = _find_active_oc_node()
+        if node and hasattr(node, 'draw_buttons'):
+            node.draw_buttons(context, layout)
 
 
 class OpenCompNodeCategory(NodeCategory):
@@ -178,14 +193,18 @@ def _import_nodes():
     from .nodes.merge import over, merge, shuffle
     from .nodes.filter import blur, sharpen
     from .nodes.transform import transform, crop
+    from .nodes.utility import reroute
     from .nodes import viewer  # import the package, not just viewer.py
+    from .nodes import node_panel  # Node Editor sidebar panels
     return [
         read, write,
         grade, cdl, constant,
         over, merge, shuffle,
         blur, sharpen,
         transform, crop,
+        reroute,
         viewer,
+        node_panel,
     ]
 
 
@@ -193,10 +212,12 @@ def _import_nodes():
 _category_name = "OC_NODE_CATEGORIES"
 
 def _draw_canvas_button(self, context):
-    """Draw the 'Open Qt Canvas' button in the Node Editor header."""
+    """Draw the 'Open Canvas' button in the Node Editor header."""
     if context.space_data.tree_type == "OC_NT_compositor":
-        layout = self.layout
-        layout.operator("oc.launch_canvas", text="", icon='WINDOW')
+        # Only show if the operator exists
+        if hasattr(bpy.types, "OC_OT_launch_canvas"):
+            layout = self.layout
+            layout.operator("oc.launch_canvas", text="", icon='WINDOW')
 
 
 _node_categories = [
@@ -224,6 +245,9 @@ _node_categories = [
     OpenCompNodeCategory("OC_CAT_TRANSFORM", "Transform", items=[
         NodeItem("OC_N_transform"),
         NodeItem("OC_N_crop"),
+    ]),
+    OpenCompNodeCategory("OC_CAT_UTILITY", "Utility", items=[
+        NodeItem("OC_N_reroute"),
     ]),
 ]
 
@@ -257,8 +281,11 @@ def register():
     # Override node editor context menu
     _override_node_context_menu()
 
-    # Add menu item to Node Editor header
-    bpy.types.NODE_HT_header.append(_draw_canvas_button)
+    # Add menu item to Node Editor header (if available)
+    try:
+        bpy.types.NODE_HT_header.append(_draw_canvas_button)
+    except AttributeError:
+        pass  # Not available in this Blender version
 
 
 def unregister():

@@ -20,6 +20,10 @@ class OpenCompNode(bpy.types.Node):
     def poll(cls, ntree):
         return ntree.bl_idname == "OC_NT_compositor"
 
+    def init(self, context):
+        """Initialize node - collapsed by default."""
+        self.hide = True
+
     def evaluate(self, texture_pool):
         """Evaluate this node and return output GPUTexture.
 

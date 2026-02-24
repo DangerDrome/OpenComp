@@ -16,6 +16,7 @@ def hide_all_default_ui():
     _hidden_classes.clear()
 
     # Panels to hide (by prefix) - be very comprehensive
+    # NOTE: NODE_PT_ is NOT hidden - we need node editor panels to work
     panel_prefixes = [
         # Properties panels
         'OBJECT_PT_', 'MESH_PT_', 'CURVE_PT_', 'SURFACE_PT_',
@@ -27,25 +28,26 @@ def hide_all_default_ui():
         'TEXTURE_PT_', 'GPENCIL_PT_', 'SHADERFX_PT_',
         # View3D panels
         'VIEW3D_PT_',
-        # Node editor panels
-        'NODE_PT_',
         # Dopesheet panels
         'DOPESHEET_PT_', 'ACTION_PT_',
         # Sequencer panels
         'SEQUENCER_PT_',
         # Other editors
-        'TOPBAR_PT_', 'FILEBROWSER_PT_', 'CLIP_PT_', 'NLA_PT_',
+        # NOTE: FILEBROWSER_PT_ is NOT hidden - we need the file browser to work
+        'TOPBAR_PT_', 'CLIP_PT_', 'NLA_PT_',
         'GRAPH_PT_', 'IMAGE_PT_', 'TEXT_PT_', 'CONSOLE_PT_',
         'INFO_PT_', 'OUTLINER_PT_', 'SPREADSHEET_PT_', 'USERPREF_PT_',
         'PREFERENCES_PT_', 'STATUSBAR_PT_',
     ]
 
     # Headers to hide - all editor types
+    # NOTE: NODE_HT_header is NOT hidden - we need it for the Add menu
+    # NOTE: FILEBROWSER_HT_header is NOT hidden - we need the file browser to work
     header_classes = [
         'VIEW3D_HT_header', 'VIEW3D_HT_tool_header',
         'PROPERTIES_HT_header', 'DOPESHEET_HT_header',
-        'TOPBAR_HT_upper_bar', 'NODE_HT_header',
-        'FILEBROWSER_HT_header', 'OUTLINER_HT_header',
+        'TOPBAR_HT_upper_bar',
+        'OUTLINER_HT_header',
         'INFO_HT_header', 'GRAPH_HT_header', 'NLA_HT_header',
         'IMAGE_HT_header', 'IMAGE_HT_tool_header',
         'SEQUENCER_HT_header', 'SEQUENCER_HT_tool_header',
@@ -55,11 +57,12 @@ def hide_all_default_ui():
     ]
 
     # Menus to hide
+    # NOTE: NODE_MT_editor_menus is NOT hidden - we need node editor menus
     menu_classes = [
         'TOPBAR_MT_file', 'TOPBAR_MT_file_new', 'TOPBAR_MT_file_recover',
         'TOPBAR_MT_file_defaults', 'TOPBAR_MT_edit', 'TOPBAR_MT_render',
         'TOPBAR_MT_window', 'TOPBAR_MT_help', 'TOPBAR_MT_editor_menus',
-        'VIEW3D_MT_editor_menus', 'NODE_MT_editor_menus',
+        'VIEW3D_MT_editor_menus',
         'DOPESHEET_MT_editor_menus', 'GRAPH_MT_editor_menus',
         'NLA_MT_editor_menus', 'IMAGE_MT_editor_menus',
         'SEQUENCER_MT_editor_menus', 'CLIP_MT_editor_menus',
@@ -122,9 +125,8 @@ def restore_default_ui():
 
 
 def register():
-    # Hide immediately, then again after a delay to catch late-loaded classes
+    # Hide default Blender UI classes (no timer - just once at registration)
     hide_all_default_ui()
-    bpy.app.timers.register(hide_all_default_ui, first_interval=0.5)
 
 
 def unregister():

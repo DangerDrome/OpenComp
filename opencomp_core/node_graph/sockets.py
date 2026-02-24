@@ -79,7 +79,10 @@ _classes = (ImageSocket, FloatSocket, VectorSocket)
 
 def register():
     for cls in _classes:
-        bpy.utils.register_class(cls)
+        try:
+            bpy.utils.register_class(cls)
+        except ValueError:
+            pass  # Already registered
 
 
 def unregister():

@@ -31,6 +31,7 @@ class MergeNode(OpenCompNode):
     _output_texture = None
 
     def init(self, context):
+        super().init(context)
         self.inputs.new("OC_NS_image", "A")
         self.inputs.new("OC_NS_image", "B")
         self.outputs.new("OC_NS_image", "Image")

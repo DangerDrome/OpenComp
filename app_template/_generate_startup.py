@@ -54,6 +54,9 @@ def _apply_theme():
         # General UI
         theme.user_interface.wcol_regular.inner = (0.22, 0.22, 0.22, 1.0)
 
+        # Hide region toggle arrows by making icons invisible
+        theme.user_interface.icon_alpha = 0.0
+
         # Node editor - dark background (back is RGB, wire is RGBA)
         theme.node_editor.space.back = (0.16, 0.16, 0.16)
         theme.node_editor.wire = (0.5, 0.5, 0.5, 1.0)
@@ -204,7 +207,59 @@ def _build_layout():
         return 0.1
 
     if _phase == 4:
-        # ── Phase 4: Log final layout, save, quit ────────────────────
+        # ── Phase 4: Configure regions ─────────────────────────────────────
+        print("[Gen] Phase 4: Configuring regions")
+        for area in screen.areas:
+            if area.type == 'NODE_EDITOR':
+                for space in area.spaces:
+                    if space.type == 'NODE_EDITOR':
+                        space.show_region_toolbar = False
+                        space.show_region_ui = False
+                        space.show_region_header = True
+            elif area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        space.show_region_toolbar = False
+                        space.show_region_ui = False
+                        space.show_region_tool_header = False
+                        space.show_region_header = True
+                        space.show_gizmo = False
+                        space.overlay.show_overlays = False
+            elif area.type == 'PROPERTIES':
+                for space in area.spaces:
+                    if space.type == 'PROPERTIES':
+                        space.context = 'SCENE'
+                        space.show_region_header = False
+                # Hide the navigation bar (left icon column)
+                for region in area.regions:
+                    if region.type == 'NAVIGATION_BAR' and region.width > 1:
+                        try:
+                            with bpy.context.temp_override(
+                                window=window, area=area, region=region
+                            ):
+                                bpy.ops.screen.region_toggle(
+                                    region_type='NAVIGATION_BAR'
+                                )
+                        except Exception as e:
+                            print(f"  Nav bar toggle failed: {e}")
+                        break
+
+        # Hide status bar
+        screen.show_statusbar = False
+
+        # Set preferences
+        prefs = bpy.context.preferences
+        prefs.view.show_navigate_ui = False
+        prefs.view.show_gizmo = False
+        prefs.view.show_object_info = False
+        prefs.view.show_view_name = False
+        prefs.view.show_splash = False
+
+        _phase = 5
+        return 0.1
+
+    if _phase == 5:
+        # ── Phase 5: Log final layout, save, quit ────────────────────
         print("[Gen] Final layout:")
         for area in screen.areas:
             print(f"  {area.type:20s} ({area.x}, {area.y}) {area.width}x{area.height}")

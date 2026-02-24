@@ -91,24 +91,14 @@ class OC_OT_splash_about(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
 
-        # Branding
-        layout.label(text="OpenComp", icon='NODE_COMPOSITING')
-        layout.label(text=_OC_VERSION)
-        layout.separator()
+        row = layout.row()
+        row.scale_y = 2.0
+        row.alignment = 'CENTER'
+        row.label(text="OPENCOMP")
 
-        # Description
-        col = layout.column(align=True)
-        col.label(text="Open Source VFX Compositor")
-        col.label(text="Built as a Blender 5.x add-on")
-        col.separator()
-
-        # Tech stack
-        col.label(text="Python + GLSL  |  GPU-accelerated")
-        col.label(text="OCIO colour management  |  OIIO file I/O")
-        col.separator()
-
-        # License
-        col.label(text="License: GPL 3.0")
+        row = layout.row()
+        row.alignment = 'CENTER'
+        row.label(text=_OC_VERSION)
 
 
 class OC_MT_help(bpy.types.Menu):
@@ -161,7 +151,50 @@ _link_drag = {
     'tree': None,
     'draw_handler': None,
     'waiting_for_menu': False,
+    'nodes_before': set(),
 }
+
+
+def _cleanup_link_drag():
+    """Module-level cleanup for link drag state."""
+    state = _link_drag
+    state['active'] = False
+    state['waiting_for_menu'] = False
+    state['source_socket'] = None
+    state['nodes_before'] = set()
+
+    if state['draw_handler']:
+        try:
+            bpy.types.SpaceNodeEditor.draw_handler_remove(state['draw_handler'], 'WINDOW')
+        except Exception:
+            pass
+        state['draw_handler'] = None
+
+    # Force redraw
+    for area in bpy.context.screen.areas:
+        if area.type == 'NODE_EDITOR':
+            area.tag_redraw()
+
+
+def _check_menu_dismissed():
+    """Timer callback to check if menu was dismissed without selection."""
+    state = _link_drag
+
+    if not state['waiting_for_menu']:
+        return None  # Already cleaned up
+
+    tree = state['tree']
+    if tree:
+        # Check if a new node was created
+        current_nodes = set(n.name for n in tree.nodes)
+        new_nodes = current_nodes - state['nodes_before']
+        if new_nodes:
+            # Node was created - don't clean up yet, let the link timer handle it
+            return None
+
+    # No node created, clean up the link
+    _cleanup_link_drag()
+    return None
 
 
 def _get_socket_position(node, socket, is_output):
@@ -202,7 +235,7 @@ def _draw_temp_link():
     gpu.state.line_width_set(2.0)
 
     shader.bind()
-    shader.uniform_float("color", (1.0, 0.6, 0.2, 0.9))  # Orange link color
+    shader.uniform_float("color", (0.3, 0.85, 0.5, 0.9))  # Green link color
     shader.uniform_float("lineWidth", 2.0)
     shader.uniform_float("viewportSize", gpu.state.viewport_get()[2:])
 
@@ -280,10 +313,20 @@ class OC_OT_link_drag(bpy.types.Operator):
         context.area.tag_redraw()
 
         if state['waiting_for_menu']:
-            # We're waiting for menu selection - pass through most events
-            # Only cancel on ESC
+            # We're waiting for menu selection
+            # Cancel on ESC
             if event.type == 'ESC' and event.value == 'PRESS':
-                self._cleanup(context)
+                _cleanup_link_drag()
+                return {'CANCELLED'}
+
+            # If user clicks elsewhere (dismisses menu), clean up after short delay
+            if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+                bpy.app.timers.register(_check_menu_dismissed, first_interval=0.15)
+                return {'PASS_THROUGH'}
+
+            # Also check for right-click dismiss
+            if event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
+                _cleanup_link_drag()
                 return {'CANCELLED'}
 
             return {'PASS_THROUGH'}
@@ -302,13 +345,13 @@ class OC_OT_link_drag(bpy.types.Operator):
                 # Connect to this socket
                 tree = state['tree']
                 try:
-                    if state['is_output']:
+                    if state.get('is_output'):
                         tree.links.new(state['source_socket'], target_socket)
                     else:
                         tree.links.new(target_socket, state['source_socket'])
                 except:
                     pass
-                self._cleanup(context)
+                _cleanup_link_drag()
                 return {'FINISHED'}
             else:
                 # Released in empty space - show menu, keep line visible
@@ -320,15 +363,16 @@ class OC_OT_link_drag(bpy.types.Operator):
                 loc = view2d.region_to_view(event.mouse_region_x, event.mouse_region_y)
                 context.space_data.cursor_location = loc
 
-                # Store nodes before menu
-                self._nodes_before = set(n.name for n in state['tree'].nodes)
+                # Store nodes before menu in global state
+                state['nodes_before'] = set(n.name for n in state['tree'].nodes)
 
                 # Show the add menu
                 bpy.ops.wm.call_menu('INVOKE_DEFAULT', name="NODE_MT_add")
 
                 # Start checking for new node
+                self._menu_check_count = 0
                 bpy.app.timers.register(
-                    lambda: self._check_for_new_node(context),
+                    self._check_for_new_node_timer,
                     first_interval=0.05
                 )
 
@@ -336,37 +380,38 @@ class OC_OT_link_drag(bpy.types.Operator):
 
         # Cancel on right click or escape
         if event.type in {'RIGHTMOUSE', 'ESC'}:
-            self._cleanup(context)
+            _cleanup_link_drag()
             return {'CANCELLED'}
 
         return {'RUNNING_MODAL'}
 
-    def _check_for_new_node(self, context):
+    def _check_for_new_node_timer(self):
         """Timer to check if user selected a node from menu."""
         state = _link_drag
 
-        # Increment check count for timeout
-        if not hasattr(self, '_menu_check_count'):
-            self._menu_check_count = 0
         self._menu_check_count += 1
 
-        # Timeout after ~3 seconds (60 * 50ms)
-        if self._menu_check_count > 60 or not state['waiting_for_menu']:
-            self._cleanup(context)
+        # Timeout after ~1 second (20 * 50ms)
+        if self._menu_check_count > 20 or not state['waiting_for_menu']:
+            _cleanup_link_drag()
             return None
 
         tree = state['tree']
         if not tree:
-            self._cleanup(context)
+            _cleanup_link_drag()
             return None
 
         # Check for new node
-        for node in tree.nodes:
-            if node.name not in self._nodes_before:
-                # New node created - link it
-                self._create_link(state, node)
-                self._cleanup(context)
-                return None
+        current_nodes = set(n.name for n in tree.nodes)
+        new_nodes = current_nodes - state['nodes_before']
+        if new_nodes:
+            # New node created - link it
+            new_node_name = list(new_nodes)[0]
+            new_node = tree.nodes.get(new_node_name)
+            if new_node:
+                self._create_link(state, new_node)
+            _cleanup_link_drag()
+            return None
 
         # Keep checking
         return 0.05
@@ -377,7 +422,7 @@ class OC_OT_link_drag(bpy.types.Operator):
         socket = state['source_socket']
 
         try:
-            if state['is_output']:
+            if state.get('is_output'):
                 # Source is output, connect to new node's input
                 for inp in new_node.inputs:
                     if inp.enabled:
@@ -393,18 +438,8 @@ class OC_OT_link_drag(bpy.types.Operator):
             print(f"[OpenComp] Link creation failed: {e}")
 
     def _cleanup(self, context):
-        """Clean up drag state and remove draw handler."""
-        state = _link_drag
-        state['active'] = False
-        state['waiting_for_menu'] = False
-        state['source_socket'] = None
-
-        if state['draw_handler']:
-            bpy.types.SpaceNodeEditor.draw_handler_remove(state['draw_handler'], 'WINDOW')
-            state['draw_handler'] = None
-
-        if context.area:
-            context.area.tag_redraw()
+        """Clean up drag state - delegates to module function."""
+        _cleanup_link_drag()
 
     def _find_socket_at_cursor(self, context, event):
         """Find socket under cursor. Returns (socket, node, is_output) or (None, None, None)."""
@@ -564,6 +599,50 @@ _operator_classes = [
     OC_OT_show_add_menu,
     OC_OT_link_drag,
     OC_OT_add_and_link,
+]
+
+
+# ── Left Toolbar Panel ─────────────────────────────────────────────────
+
+class OC_PT_left_toolbar(bpy.types.Panel):
+    """OpenComp left toolbar — Nuke-style tool icons."""
+    bl_idname = "OC_PT_left_toolbar"
+    bl_label = ""  # No label, just icons
+    bl_space_type = 'IMAGE_EDITOR'
+    bl_region_type = 'TOOLS'
+    bl_options = {'HIDE_HEADER'}
+
+    @classmethod
+    def poll(cls, context):
+        # Only show in narrow IMAGE_EDITOR areas (toolbar areas)
+        return context.area and context.area.width < 100
+
+    def draw(self, context):
+        layout = self.layout
+        layout.scale_y = 1.5
+
+        # Tool buttons - each adds a node or performs an action
+        col = layout.column(align=True)
+
+        # File operations
+        col.operator("wm.open_mainfile", text="", icon='FILEBROWSER')
+        col.operator("wm.save_mainfile", text="", icon='FILE_TICK')
+        col.separator()
+
+        # Node creation shortcuts
+        col.operator("node.add_node", text="", icon='IMAGE_DATA').type = 'OC_N_read'
+        col.operator("node.add_node", text="", icon='COLOR').type = 'OC_N_grade'
+        col.operator("node.add_node", text="", icon='OVERLAY').type = 'OC_N_over'
+        col.operator("node.add_node", text="", icon='MOD_SMOOTH').type = 'OC_N_blur'
+        col.operator("node.add_node", text="", icon='ORIENTATION_GIMBAL').type = 'OC_N_transform'
+        col.separator()
+
+        col.operator("node.add_node", text="", icon='RESTRICT_VIEW_OFF').type = 'OC_N_viewer'
+        col.operator("node.add_node", text="", icon='EXPORT').type = 'OC_N_write'
+
+
+_panel_classes = [
+    OC_PT_left_toolbar,
 ]
 
 
@@ -731,29 +810,32 @@ def _restore_view3d_header():
 
 # ── Splash Screen Override ─────────────────────────────────────────────
 
+class OC_OT_dismiss_splash(bpy.types.Operator):
+    """Dismiss the splash screen."""
+    bl_idname = "oc.dismiss_splash"
+    bl_label = "Continue"
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+
 def _opencomp_splash_draw(self, context):
-    """Replace Blender's splash menu with OpenComp content."""
+    """Replace Blender's splash menu - click anywhere to dismiss."""
     layout = self.layout
-    layout.operator_context = 'EXEC_DEFAULT'
-    layout.emboss = 'PULLDOWN_MENU'
+    layout.alignment = 'CENTER'
 
-    split = layout.split()
+    layout.separator()
 
-    # Left column: actions
-    col1 = split.column()
-    col1.label(text="OpenComp " + _OC_VERSION)
-    col1.separator()
-    col1.operator_context = 'INVOKE_DEFAULT'
-    col1.operator("wm.open_mainfile", text="Open...", icon='FILE_FOLDER')
-    col1.operator("wm.recover_last_session", text="Recover Session", icon='RECOVER_LAST')
+    # Title - centered
+    row = layout.row()
+    row.alignment = 'CENTER'
+    row.scale_y = 2.0
+    row.operator("oc.dismiss_splash", text="OPENCOMP", emboss=False)
 
-    # Right column: recent files
-    col2 = split.column()
-    found_recent = col2.template_recent_files(rows=5)
-    if found_recent:
-        col2.label(text="Recent Files")
-    else:
-        col2.label(text="No recent files")
+    # Version - centered
+    row = layout.row()
+    row.alignment = 'CENTER'
+    row.operator("oc.dismiss_splash", text=_OC_VERSION, emboss=False)
 
     layout.separator()
 
@@ -783,22 +865,9 @@ def _restore_splash():
 # ── Splash About Override ──────────────────────────────────────────────
 
 def _opencomp_splash_about_draw(self, context):
-    """Replace Blender's splash about with OpenComp branding."""
-    layout = self.layout
-
-    # OpenComp branding instead of Blender logo
-    col = layout.column(align=True)
-    col.scale_y = 1.5
-    col.label(text="OpenComp", icon='NODE_COMPOSITING')
-    col.label(text=_OC_VERSION)
-
-    layout.separator()
-
-    col = layout.column(align=True)
-    col.label(text="Open Source VFX Compositor")
-    col.label(text="GPU-accelerated  |  OCIO colour  |  OIIO I/O")
-
-    layout.separator()
+    """Replace Blender's splash about - nothing, we handle it in main splash."""
+    # Empty - main splash draws everything
+    pass
 
 
 def _override_splash_about():
@@ -826,9 +895,8 @@ def _restore_splash_about():
 # ── Quick Setup Override ───────────────────────────────────────────────
 
 def _opencomp_quick_setup_draw(self, context):
-    """Replace Blender's Quick Setup with nothing — OpenComp needs no setup."""
-    # Empty draw — no quick setup needed for OpenComp
-    # User just sees the splash with recent files, no configuration wizard
+    """Replace Blender's Quick Setup with nothing."""
+    # Completely empty - don't draw anything
     pass
 
 
@@ -954,6 +1022,17 @@ def _restore_builtin_scene_panels():
 
 def _configure_area_chrome():
     """Hide toolbar and sidebar on all compositor areas. Keep headers for menus."""
+    # Hide UI elements in preferences
+    try:
+        prefs = bpy.context.preferences
+        prefs.view.show_navigate_ui = False  # Hide navigation gizmo
+        prefs.view.show_developer_ui = False
+        prefs.view.show_gizmo = False  # Hide gizmos
+        prefs.view.show_object_info = False  # Hide object info
+        prefs.view.show_view_name = False  # Hide view name
+    except Exception:
+        pass
+
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type == 'NODE_EDITOR':
@@ -961,12 +1040,14 @@ def _configure_area_chrome():
                     if space.type == 'NODE_EDITOR':
                         space.show_region_toolbar = False
                         space.show_region_ui = False
+                        space.show_region_header = True
             elif area.type == 'VIEW_3D':
                 for space in area.spaces:
                     if space.type == 'VIEW_3D':
                         space.show_region_toolbar = False
                         space.show_region_ui = False
                         space.show_region_tool_header = False
+                        space.show_region_header = True
                         space.show_gizmo = False
             elif area.type == 'DOPESHEET_EDITOR':
                 for space in area.spaces:
@@ -977,6 +1058,20 @@ def _configure_area_chrome():
                     if space.type == 'PROPERTIES':
                         space.context = 'SCENE'
                         space.show_region_header = False
+                # Hide the navigation bar (left icon column)
+                for region in area.regions:
+                    if region.type == 'NAVIGATION_BAR' and region.width > 1:
+                        try:
+                            window = bpy.context.window
+                            with bpy.context.temp_override(
+                                window=window, area=area, region=region
+                            ):
+                                bpy.ops.screen.region_toggle(
+                                    region_type='NAVIGATION_BAR'
+                                )
+                        except Exception:
+                            pass
+                        break
         screen.show_statusbar = False
 
 
@@ -984,11 +1079,11 @@ def _configure_viewer_area(area):
     """Configure a VIEW_3D area as the compositor viewer — clean, chrome-free."""
     for space in area.spaces:
         if space.type == 'VIEW_3D':
-            space.show_region_toolbar = False      # T-panel
-            space.show_region_ui = False            # N-panel
-            space.show_region_tool_header = False   # "Object Mode" bar
-            space.show_gizmo = False                # all gizmos off
-            space.overlay.show_overlays = False     # grid, axes, etc.
+            space.show_region_toolbar = False
+            space.show_region_ui = False
+            space.show_region_tool_header = False
+            space.show_gizmo = False
+            space.overlay.show_overlays = False
             space.shading.type = 'SOLID'
 
 
@@ -1077,6 +1172,162 @@ def _configure_timeline_area(area, window=None):
                 break
 
 
+
+def _create_node_editor_toolbar(window, screen, node_editor):
+    """Fallback: Create a toolbar just for the NODE_EDITOR area.
+    
+    This is used when area_join fails (areas not adjacent).
+    The toolbar will only span the NODE_EDITOR height, not full window height.
+    """
+    print("[OpenComp] Creating NODE_EDITOR-only toolbar (fallback)")
+    
+    try:
+        with bpy.context.temp_override(window=window, area=node_editor, screen=screen):
+            result = bpy.ops.screen.area_split(direction='VERTICAL', factor=0.025)
+            print(f"[OpenComp] NODE_EDITOR toolbar split result: {result}")
+    except Exception as e:
+        print(f"[OpenComp] NODE_EDITOR toolbar split failed: {e}")
+        return
+    
+    # Find the new narrow area
+    for area in screen.areas:
+        if area.type == 'NODE_EDITOR' and area.width < 100 and area.x < 10:
+            print(f"[OpenComp] Found toolbar area: w={area.width}")
+            area.type = 'IMAGE_EDITOR'
+            _configure_toolbar_area(area, window=window)
+            break
+
+def _try_create_left_toolbar(window, screen):
+    """Create a full-height left toolbar using a different approach.
+
+    Instead of trying to join/split areas (which is unreliable),
+    we enable the TOOLS region in NODE_EDITOR and VIEW_3D.
+    This creates a native toolbar sidebar that Blender manages.
+    
+    For a true full-height toolbar like Nuke, we'd need to modify startup.blend
+    or use a completely custom window layout.
+    """
+    print("[OpenComp] === CONFIGURING LEFT TOOLBAR ===")
+    print("[OpenComp] Current layout:")
+    for area in screen.areas:
+        print(f"  {area.type}: x={area.x}, y={area.y}, w={area.width}, h={area.height}")
+
+    # Enable TOOLS region in NODE_EDITOR and VIEW_3D
+    for area in screen.areas:
+        if area.type == 'NODE_EDITOR':
+            for region in area.regions:
+                if region.type == 'TOOLS':
+                    # Region exists but may be hidden - we can't directly show it
+                    # but we can toggle it via operator
+                    print(f"[OpenComp] NODE_EDITOR TOOLS region: w={region.width}")
+                    break
+        elif area.type == 'VIEW_3D':
+            for region in area.regions:
+                if region.type == 'TOOLS':
+                    print(f"[OpenComp] VIEW_3D TOOLS region: w={region.width}")
+                    break
+
+    # Alternative: Create a narrow IMAGE_EDITOR area on the left
+    # by splitting the first available left-side area
+    node_editor = None
+    view3d = None
+    for area in screen.areas:
+        if area.type == 'NODE_EDITOR' and area.x < 100:
+            node_editor = area
+        elif area.type == 'VIEW_3D' and area.x < 100:
+            view3d = area
+
+    # Don't create if toolbar already exists
+    for area in screen.areas:
+        if area.width < 100 and area.x < 10:
+            print(f"[OpenComp] Narrow left area already exists: {area.type}")
+            if area.type != 'IMAGE_EDITOR':
+                area.type = 'IMAGE_EDITOR'
+                _configure_toolbar_area(area, window=window)
+            return
+
+    # Try to split VIEW_3D to create toolbar that spans its height
+    # (partial solution - not full height but better than nothing)
+    if view3d:
+        print(f"[OpenComp] Splitting VIEW_3D for toolbar")
+        try:
+            with bpy.context.temp_override(window=window, area=view3d, screen=screen):
+                result = bpy.ops.screen.area_split(direction='VERTICAL', factor=0.02)
+                print(f"[OpenComp] VIEW_3D split result: {result}")
+        except Exception as e:
+            print(f"[OpenComp] VIEW_3D split failed: {e}")
+            return
+
+        # Find the new narrow area on the left
+        for area in screen.areas:
+            if area.type == 'VIEW_3D' and area.width < 100 and area.x < 10:
+                print(f"[OpenComp] Converting narrow VIEW_3D to toolbar: w={area.width}")
+                area.type = 'IMAGE_EDITOR'
+                _configure_toolbar_area(area, window=window)
+                
+                # Now try to extend this toolbar down to cover NODE_EDITOR too
+                # by joining with the equivalent strip on NODE_EDITOR
+                if node_editor:
+                    # Split NODE_EDITOR the same way
+                    try:
+                        with bpy.context.temp_override(window=window, area=node_editor, screen=screen):
+                            result2 = bpy.ops.screen.area_split(direction='VERTICAL', factor=0.025)
+                            print(f"[OpenComp] NODE_EDITOR split result: {result2}")
+                    except Exception as e:
+                        print(f"[OpenComp] NODE_EDITOR split failed: {e}")
+                    
+                    # Now join the two narrow strips
+                    toolbar_area = area
+                    node_toolbar = None
+                    for a in screen.areas:
+                        if a.type == 'NODE_EDITOR' and a.width < 100 and a.x < 10:
+                            a.type = 'IMAGE_EDITOR'
+                            node_toolbar = a
+                            break
+                    
+                    if node_toolbar and toolbar_area:
+                        # Try to join these two toolbar areas
+                        print(f"[OpenComp] Joining toolbar strips...")
+                        # They should share an edge now
+                        if toolbar_area.y > node_toolbar.y:
+                            top_tb = toolbar_area
+                            bot_tb = node_toolbar
+                        else:
+                            top_tb = node_toolbar
+                            bot_tb = toolbar_area
+                        
+                        try:
+                            with bpy.context.temp_override(window=window, screen=screen):
+                                result3 = bpy.ops.screen.area_join(
+                                    source_xy=(bot_tb.x + bot_tb.width // 2, bot_tb.y + bot_tb.height // 2),
+                                    target_xy=(top_tb.x + top_tb.width // 2, top_tb.y + top_tb.height // 2)
+                                )
+                                print(f"[OpenComp] Toolbar join result: {result3}")
+                        except Exception as e:
+                            print(f"[OpenComp] Toolbar join failed: {e}")
+                            # Both toolbars still exist, just not joined - that's ok
+                break
+
+    print("[OpenComp] === LEFT TOOLBAR CONFIGURATION COMPLETE ===")
+    print("[OpenComp] Final layout:")
+    for area in screen.areas:
+        print(f"  {area.type}: x={area.x}, y={area.y}, w={area.width}, h={area.height}")
+
+
+def _configure_toolbar_area(area, window=None):
+    """Configure an IMAGE_EDITOR area as the left toolbar — minimal, GPU-drawn only."""
+    for space in area.spaces:
+        if space.type == 'IMAGE_EDITOR':
+            # Hide all regions - we'll draw our own UI
+            space.show_region_toolbar = False
+            space.show_region_ui = False
+            space.show_region_tool_header = False
+            space.show_region_header = False
+            # Also hide any other UI elements
+            space.show_gizmo = False
+            space.show_annotation = False   # Hide header
+
+
 def _try_split_timeline(window, screen):
     """Split the VIEW_3D area to insert a thin timeline strip below it.
 
@@ -1128,7 +1379,6 @@ def _try_split_timeline(window, screen):
     print("[OpenComp] Timeline strip created below viewer")
 
 
-_deferred_phase = 0
 _deferred_setup_done = False
 
 
@@ -1175,54 +1425,41 @@ def _try_join_properties(window, screen):
 def _deferred_ui_setup():
     """Deferred UI setup — runs via timer after window is fully ready.
 
-    Three-phase approach:
-      Phase 0: Try to join two PROPERTIES areas on the right into one column.
-      Phase 1: Split NODE_EDITOR to insert a thin timeline strip above it.
-      Phase 2: Configure all areas by type, assign tree, clean workspaces.
-
-    Area proportions (viewer vs node graph) are baked into startup.blend
-    by _generate_startup.py — no runtime adjustment needed.
+    Creates the Nuke-style layout with left toolbar.
     """
-    global _deferred_phase, _deferred_setup_done
+    global _deferred_setup_done
 
     if _deferred_setup_done:
         return None
 
+    print("[OpenComp] Running deferred UI setup...")
+
     try:
         window = bpy.context.window
         if window is None:
+            print("[OpenComp] Window not ready, retrying...")
             return 0.1  # retry
 
         screen = window.screen
 
-        if _deferred_phase == 0:
-            _deferred_phase = 1
-            _try_join_properties(window, screen)
-            return 0.1  # come back for phase 1
+        # Create left toolbar area (split from NODE_EDITOR)
+        _try_create_left_toolbar(window, screen)
 
-        if _deferred_phase == 1:
-            _deferred_phase = 2
-            _try_split_timeline(window, screen)
-            return 0.1  # come back for phase 2
-
-        # Phase 2 — configure every area by type
+        # Configure areas by type
         for area in screen.areas:
-            if area.type == 'VIEW_3D':
+            if area.type == 'IMAGE_EDITOR':
+                # Check if this is the toolbar (very narrow)
+                if area.width < 100:
+                    _configure_toolbar_area(area, window=window)
+            elif area.type == 'VIEW_3D':
                 _configure_viewer_area(area)
             elif area.type == 'NODE_EDITOR':
                 _configure_node_editor_area(area)
             elif area.type == 'PROPERTIES':
                 _configure_properties_area(area, window=window)
-            elif area.type == 'DOPESHEET_EDITOR':
-                _configure_timeline_area(area, window=window)
 
         # Assign OpenComp node tree
         _ensure_opencomp_tree()
-
-        # Remove extra workspaces
-        if len(bpy.data.workspaces) > 1:
-            with bpy.context.temp_override(window=window):
-                bpy.ops.workspace.delete_all_others()
 
         # Hide status bar
         screen.show_statusbar = False
@@ -1230,20 +1467,16 @@ def _deferred_ui_setup():
         # Replace OS window title (best-effort, X11 only)
         _set_window_title()
 
-        # Auto-launch the native GPU canvas (the primary node editor)
-        print("[OpenComp] Launching native canvas...")
+        # Auto-launch the native GPU canvas
         _launch_native_canvas()
 
-        # Auto-save the configured layout as user startup so it persists
-        try:
-            bpy.ops.wm.save_homefile()
-        except Exception:
-            pass
-
         _deferred_setup_done = True
+        print("[OpenComp] Deferred UI setup complete")
 
     except Exception as e:
-        print(f"[OpenComp] Deferred UI setup: {e}")
+        print(f"[OpenComp] Deferred UI setup error: {e}")
+        import traceback
+        traceback.print_exc()
 
     return None  # don't repeat
 
@@ -1256,34 +1489,105 @@ def _configure_ui_on_load(dummy):
     import addon_utils
     addon_utils.enable("opencomp_core", default_set=True, persistent=True)
 
+    # Fix frame range - ensure current frame is within valid range
+    scene = bpy.context.scene
+    if scene.frame_current < scene.frame_start or scene.frame_current > scene.frame_end:
+        scene.frame_current = scene.frame_start
+
     # Hide built-in scene panels so only OC panels show in Properties area
     _hide_builtin_scene_panels()
 
     # Hide chrome on all compositor areas (NODE_EDITOR, VIEW_3D)
     _configure_area_chrome()
 
+    # Apply theme (must be done here after prefs load)
+    _apply_dark_theme()
+
     # Create and assign OpenComp node tree
     _ensure_opencomp_tree()
 
-    # In GUI mode, use a deferred timer for full multi-panel setup
-    if not bpy.app.background and not _deferred_setup_done:
-        global _deferred_phase
-        _deferred_phase = 0
-        bpy.app.timers.register(_deferred_ui_setup, first_interval=0.1)
+    # Set window title (delayed to ensure window exists)
+    bpy.app.timers.register(_set_window_title, first_interval=0.5)
+
+    # Schedule deferred UI setup (creates left toolbar, etc.)
+    bpy.app.timers.register(_deferred_ui_setup, first_interval=0.3)
 
 
 def _apply_dark_theme():
     """Apply a dark theme matching Nuke's colour language."""
-    try:
-        prefs = bpy.context.preferences
-        theme = prefs.themes[0]
+    prefs = bpy.context.preferences
+    theme = prefs.themes[0]
+    ui = theme.user_interface
 
-        # Node editor - dark background (back is RGB, wire is RGBA)
+    # Consistent UI scale and line width for clean look
+    try:
+        prefs.view.ui_scale = 1.0
+        prefs.view.ui_line_width = 'THIN'
+    except Exception:
+        pass
+
+    # Panel border - match background so it's not jarring
+    ui.editor_border = (0.12, 0.12, 0.12)
+
+    # General UI widget colors - wrap in try/except for safety
+    try:
+        ui.wcol_regular.inner = (0.22, 0.22, 0.22, 1.0)
+        ui.wcol_regular.inner_sel = (0.35, 0.35, 0.35, 1.0)
+        ui.wcol_regular.outline = (0.15, 0.15, 0.15, 1.0)
+        ui.wcol_regular.text = (0.85, 0.85, 0.85)  # RGB only
+        ui.wcol_regular.text_sel = (1.0, 1.0, 1.0)  # RGB only
+
+        ui.wcol_tool.inner = (0.25, 0.25, 0.25, 1.0)
+        ui.wcol_tool.inner_sel = (0.4, 0.4, 0.4, 1.0)
+        ui.wcol_tool.text = (0.85, 0.85, 0.85)
+
+        ui.wcol_text.inner = (0.18, 0.18, 0.18, 1.0)
+        ui.wcol_text.inner_sel = (0.3, 0.3, 0.3, 1.0)
+        ui.wcol_text.text = (0.9, 0.9, 0.9)
+
+        ui.wcol_num.inner = (0.2, 0.2, 0.2, 1.0)
+        ui.wcol_num.text = (0.85, 0.85, 0.85)
+    except Exception:
+        pass
+
+    # Node editor - dark background
+    try:
         theme.node_editor.space.back = (0.16, 0.16, 0.16)
         theme.node_editor.wire = (0.5, 0.5, 0.5, 1.0)
         theme.node_editor.wire_select = (1.0, 1.0, 1.0, 1.0)
-    except Exception as e:
-        print(f"[OpenComp] Theme apply skipped: {e}")
+    except Exception:
+        pass
+
+    # View3D theme
+    try:
+        theme.view_3d.space.back = (0.12, 0.12, 0.12)
+    except Exception:
+        pass
+
+    # Properties panel - dark background
+    try:
+        theme.properties.space.back = (0.18, 0.18, 0.18)
+        theme.properties.space.header = (0.20, 0.20, 0.20, 1.0)
+        # Panel header styling
+        theme.properties.space.panelcolors.header = (0.22, 0.22, 0.22, 1.0)
+    except Exception:
+        pass
+
+    # Panel colors - consistent across all editors
+    try:
+        ui.panel.header = (0.22, 0.22, 0.22, 1.0)
+        ui.panel.back = (0.18, 0.18, 0.18, 1.0)
+        ui.panel.sub_back = (0.16, 0.16, 0.16, 1.0)
+    except Exception:
+        pass
+
+    # Widget emboss (subtle 3D effect on buttons)
+    try:
+        ui.emboss = (0.0, 0.0, 0.0, 0.3)
+    except Exception:
+        pass
+
+    print("[OpenComp] Nuke theme applied")
 
 
 # ── Keymaps ────────────────────────────────────────────────────────────
@@ -1446,7 +1750,7 @@ def _clear_default_node_keymaps():
     We disable rather than delete because the default keyconfig is read-only.
     Our addon keymaps take priority over disabled default ones.
 
-    We keep link-related keymaps enabled for proper drag-to-menu behavior.
+    We keep essential keymaps enabled for proper node editor functionality.
     """
     wm = bpy.context.window_manager
     kc = wm.keyconfigs.default
@@ -1455,12 +1759,44 @@ def _clear_default_node_keymaps():
 
     # Keymaps to keep enabled for proper node editor functionality
     keep_enabled = {
+        # Link operations
         'node.link',           # Link dragging + popup menu on release
         'node.link_make',      # Making links
         'node.link_viewer',    # Connect to viewer
         'node.links_cut',      # Cutting links
         'node.links_detach',   # Detaching links
         'node.links_mute',     # Muting links
+        # Essential node operations
+        'node.add_node',       # Adding nodes from menu
+        'node.select',         # Clicking to select nodes
+        'node.select_box',     # Box selection
+        'node.select_all',     # Select all
+        'node.translate_attach',  # Moving nodes
+        'node.delete',         # Deleting nodes
+        'node.delete_reconnect',  # Dissolve nodes
+        'node.duplicate_move', # Duplicating nodes
+        'node.clipboard_copy', # Copy
+        'node.clipboard_paste',# Paste
+        'node.mute_toggle',    # Mute toggle
+        'node.view_all',       # Frame all
+        'node.view_selected',  # Frame selected
+        'node.find_node',      # Find node
+        'node.join',           # Join into frame
+        'node.detach',         # Remove from frame
+        # View operations (pan/zoom)
+        'view2d.pan',          # Panning
+        'view2d.zoom',         # Zooming
+        'view2d.zoom_in',      # Zoom in
+        'view2d.zoom_out',     # Zoom out
+        'view2d.scroll_left',  # Scroll
+        'view2d.scroll_right',
+        'view2d.scroll_up',
+        'view2d.scroll_down',
+        # Menu operations
+        'wm.call_menu',        # Opening menus (Add menu, context menu)
+        # Undo/redo
+        'ed.undo',
+        'ed.redo',
     }
 
     count = 0
@@ -1470,7 +1806,7 @@ def _clear_default_node_keymaps():
                 if kmi.active and kmi.idname not in keep_enabled:
                     kmi.active = False
                     count += 1
-    print(f"[OpenComp] Disabled {count} default Node Editor shortcuts (kept link operators)")
+    print(f"[OpenComp] Disabled {count} default Node Editor shortcuts (kept essential operators)")
 
 
 def _restore_default_node_keymaps():
@@ -1517,6 +1853,19 @@ def register():
         except RuntimeError:
             pass
 
+    # Register panel classes (toolbar)
+    for cls in _panel_classes:
+        try:
+            bpy.utils.register_class(cls)
+        except RuntimeError:
+            pass
+
+    # Register splash dismiss operator
+    try:
+        bpy.utils.register_class(OC_OT_dismiss_splash)
+    except RuntimeError:
+        pass
+
     _override_topbar()
     _override_view3d_header()
     _override_splash()
@@ -1528,6 +1877,9 @@ def register():
 
     # Zoom at mouse cursor (industry standard, not center of panel)
     bpy.context.preferences.inputs.use_zoom_to_mouse = True
+
+    # Disable splash screen for now (dismissal not working properly)
+    bpy.context.preferences.view.show_splash = False
 
     # Auto-save preferences on quit so settings persist
     bpy.context.preferences.use_preferences_save = True
@@ -1566,6 +1918,13 @@ def unregister():
     if _track_active_node in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_track_active_node)
 
+    # Unregister panel classes
+    for cls in reversed(_panel_classes):
+        try:
+            bpy.utils.unregister_class(cls)
+        except RuntimeError:
+            pass
+
     # Unregister menu classes
     for cls in reversed(_menu_classes):
         try:
@@ -1579,5 +1938,11 @@ def unregister():
             bpy.utils.unregister_class(cls)
         except RuntimeError:
             pass
+
+    # Unregister splash dismiss operator
+    try:
+        bpy.utils.unregister_class(OC_OT_dismiss_splash)
+    except RuntimeError:
+        pass
 
     print("[OpenComp] App template unregistered")

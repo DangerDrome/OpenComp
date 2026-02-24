@@ -76,9 +76,9 @@ def main():
     palette.setColor(QPalette.Text, QColor(200, 200, 200))
     palette.setColor(QPalette.Button, QColor(50, 50, 50))
     palette.setColor(QPalette.ButtonText, QColor(200, 200, 200))
-    palette.setColor(QPalette.BrightText, QColor(255, 165, 0))
-    palette.setColor(QPalette.Link, QColor(255, 165, 0))
-    palette.setColor(QPalette.Highlight, QColor(255, 165, 0))
+    palette.setColor(QPalette.BrightText, QColor(76, 204, 115))
+    palette.setColor(QPalette.Link, QColor(76, 204, 115))
+    palette.setColor(QPalette.Highlight, QColor(76, 204, 115))
     palette.setColor(QPalette.HighlightedText, QColor(30, 30, 30))
     app.setPalette(palette)
 

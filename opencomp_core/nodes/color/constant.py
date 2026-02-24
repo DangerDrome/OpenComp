@@ -27,6 +27,7 @@ class ConstantNode(OpenCompNode):
     _output_texture = None
 
     def init(self, context):
+        super().init(context)
         self.outputs.new("OC_NS_image", "Image")
 
     def draw_buttons(self, context, layout):
