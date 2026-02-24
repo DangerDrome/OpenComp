@@ -300,6 +300,41 @@ def _draw_timeline_strip(region_width, timeline_height):
     scrub_padding = 4
     _timeline_buttons["scrub_area"] = (timeline_left, bar_bottom - scrub_padding, timeline_width, bar_height + scrub_padding * 2)
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # CACHE BAR - Shows which frames are cached (Nuke-style green bar)
+    # ═══════════════════════════════════════════════════════════════════════
+    try:
+        from ..nodes.viewer.viewer import get_cached_frames
+        cached_frames = get_cached_frames()
+        print(f"[OpenComp DEBUG] Cache bar: {len(cached_frames)} frames cached, frame_range={frame_start}-{frame_end}")
+        if cached_frames:
+            cache_bar_height = 5  # Taller for visibility
+            cache_bar_y = bar_bottom - 8  # Just below the scrub bar
+            print(f"[OpenComp DEBUG] Drawing cache bar at y={cache_bar_y}, bar_bottom={bar_bottom}")
+
+            # Draw cached frame indicators
+            drawn_count = 0
+            for cached_frame in cached_frames:
+                if frame_start <= cached_frame <= frame_end:
+                    # Calculate position for this frame
+                    cache_x = timeline_left + (cached_frame - frame_start) / (frame_end - frame_start) * timeline_width
+                    # Draw a green rectangle for each cached frame
+                    pixel_width = max(3, timeline_width / (frame_end - frame_start + 1))
+                    cache_verts = [
+                        (cache_x, cache_bar_y),
+                        (cache_x + pixel_width, cache_bar_y),
+                        (cache_x + pixel_width, cache_bar_y + cache_bar_height),
+                        (cache_x, cache_bar_y + cache_bar_height),
+                    ]
+                    batch = batch_for_shader(shader, 'TRIS', {"pos": cache_verts}, indices=indices)
+                    shader.bind()
+                    shader.uniform_float("color", (0.2, 0.9, 0.2, 1.0))  # Bright green for cached
+                    batch.draw(shader)
+                    drawn_count += 1
+            print(f"[OpenComp DEBUG] Drew {drawn_count} cache indicators")
+    except Exception as e:
+        print(f"[OpenComp] Cache bar error: {e}")
+
     # PLAYHEAD - bright RED line with triangle (highly visible)
     # Clamp current frame to valid range for display
     display_frame = max(frame_start, min(frame_end, frame_current))
@@ -383,6 +418,26 @@ def _draw_timeline_strip(region_width, timeline_height):
     _draw_timeline_button(shader, btn_x, btn_row_y, btn_size, btn_size, "L", loop_color)
     _timeline_buttons["loop"] = (btn_x, btn_row_y, btn_size, btn_size)
 
+    # Cache memory display (center area, between buttons and frame counter)
+    try:
+        from ..nodes.viewer.viewer import get_cache_memory_info
+        cache_info = get_cache_memory_info()
+        print(f"[OpenComp DEBUG] Cache info: {cache_info}")
+        blf.size(0, 11)
+        # Color based on cache usage - bright green when has cache, dim gray when empty
+        if cache_info['frame_count'] > 0:
+            blf.color(0, 0.4, 1.0, 0.4, 1.0)  # Bright green for cached frames
+        else:
+            blf.color(0, 0.4, 0.4, 0.4, 1.0)  # Gray when empty
+        cache_text = f"Cache: {cache_info['used_gb']:.1f}/{cache_info['limit_gb']:.0f}GB ({cache_info['frame_count']}f)"
+        # Position in center of timeline
+        cache_x = region_width // 2 - 60
+        print(f"[OpenComp DEBUG] Drawing cache text '{cache_text}' at x={cache_x}, y={btn_row_y + 5}")
+        blf.position(0, cache_x, btn_row_y + 5, 0)
+        blf.draw(0, cache_text)
+    except Exception as e:
+        print(f"[OpenComp] Cache memory display error: {e}")
+
     # Frame counter (right side)
     blf.size(0, 14)
     blf.color(0, 0.9, 0.9, 0.9, 1.0)
@@ -414,16 +469,16 @@ def handle_timeline_click(x, y, region_height):
     for btn_name, (bx, by, bw, bh) in _timeline_buttons.items():
         if bx <= x <= bx + bw and by <= y <= by + bh:
             if btn_name == "goto_start":
-                scene.frame_current = scene.frame_preview_start if scene.use_preview_range else frame_start
+                scene.frame_set(scene.frame_preview_start if scene.use_preview_range else frame_start)
                 return True
             elif btn_name == "goto_end":
-                scene.frame_current = scene.frame_preview_end if scene.use_preview_range else frame_end
+                scene.frame_set(scene.frame_preview_end if scene.use_preview_range else frame_end)
                 return True
             elif btn_name == "step_back":
-                scene.frame_current = max(frame_start, scene.frame_current - 1)
+                scene.frame_set(max(frame_start, scene.frame_current - 1))
                 return True
             elif btn_name == "step_forward":
-                scene.frame_current = min(frame_end, scene.frame_current + 1)
+                scene.frame_set(min(frame_end, scene.frame_current + 1))
                 return True
             elif btn_name == "play_pause":
                 bpy.ops.screen.animation_play()
@@ -443,18 +498,18 @@ def handle_timeline_click(x, y, region_height):
                 return True
             elif btn_name == "in_point":
                 # Clicking on the in-point marker - go to in point
-                scene.frame_current = scene.frame_preview_start if scene.use_preview_range else frame_start
+                scene.frame_set(scene.frame_preview_start if scene.use_preview_range else frame_start)
                 return True
             elif btn_name == "out_point":
                 # Clicking on the out-point marker - go to out point
-                scene.frame_current = scene.frame_preview_end if scene.use_preview_range else frame_end
+                scene.frame_set(scene.frame_preview_end if scene.use_preview_range else frame_end)
                 return True
             elif btn_name == "scrub_area":
                 # Scrub to frame
                 scrub_x, scrub_y, scrub_w, scrub_h = _timeline_buttons["scrub_area"]
                 rel_x = (x - scrub_x) / scrub_w
                 new_frame = int(frame_start + rel_x * (frame_end - frame_start))
-                scene.frame_current = max(frame_start, min(frame_end, new_frame))
+                scene.frame_set(max(frame_start, min(frame_end, new_frame)))
                 return True
 
     return False
@@ -725,7 +780,7 @@ class OC_OT_timeline_interact(Operator):
                 # Check if clicking in scrub area
                 new_frame = get_timeline_scrub_frame(mx, my, region.width, check_y=True)
                 if new_frame is not None:
-                    context.scene.frame_current = new_frame
+                    context.scene.frame_set(new_frame)
                     OC_OT_timeline_interact._is_scrubbing = True
                     context.area.tag_redraw()
                     return {'RUNNING_MODAL'}
@@ -744,7 +799,7 @@ class OC_OT_timeline_interact(Operator):
                 # During drag, don't check y bounds - user can drag freely
                 new_frame = get_timeline_scrub_frame(mx, my, region.width, check_y=False)
                 if new_frame is not None:
-                    context.scene.frame_current = new_frame
+                    context.scene.frame_set(new_frame)
                     context.area.tag_redraw()
                 return {'RUNNING_MODAL'}
 

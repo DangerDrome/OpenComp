@@ -15,6 +15,7 @@ NODE_COLORS = {
     'merge':     (0.2, 0.6, 0.3),    # green
     'filter':    (0.5, 0.2, 0.7),    # purple
     'transform': (0.1, 0.5, 0.6),    # teal
+    'draw':      (0.6, 0.5, 0.2),    # gold/yellow
     'viewer':    (0.7, 0.15, 0.15),  # red
 }
 
@@ -280,6 +281,26 @@ class CropNode(OpenCompBaseNode):
         self.add_output('Image')
 
 
+# ── Draw Nodes ─────────────────────────────────────────────────────────────
+
+
+class RotoNode(OpenCompBaseNode):
+    """Roto — draw bezier shapes to create masks."""
+
+    __identifier__ = 'opencomp.draw'
+    NODE_NAME = 'Roto'
+    CATEGORY = 'draw'
+
+    def __init__(self):
+        super().__init__()
+
+        # Inputs (optional source for dimensions)
+        self.add_input('Source')
+
+        # Outputs
+        self.add_output('Mask')
+
+
 # ── Viewer Nodes ───────────────────────────────────────────────────────────
 
 
@@ -320,6 +341,8 @@ NODE_CLASSES = [
     # Transform
     TransformNode,
     CropNode,
+    # Draw
+    RotoNode,
     # Viewer
     ViewerNode,
 ]
@@ -358,6 +381,7 @@ def get_node_class_by_type(node_type):
         'OC_N_sharpen': SharpenNode,
         'OC_N_transform': TransformNode,
         'OC_N_crop': CropNode,
+        'OC_N_roto': RotoNode,
         'OC_N_viewer': ViewerNode,
     }
     return type_map.get(node_type)

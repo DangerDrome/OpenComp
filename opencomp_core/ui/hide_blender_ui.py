@@ -125,8 +125,9 @@ def restore_default_ui():
 
 
 def register():
-    # Hide default Blender UI classes (no timer - just once at registration)
-    hide_all_default_ui()
+    # DISABLED: Don't hide Blender UI - use native Blender interface for v0.2
+    # hide_all_default_ui()
+    print("[OpenComp] UI hiding disabled - using native Blender interface")
 
 
 def unregister():

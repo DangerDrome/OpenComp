@@ -295,16 +295,17 @@ def register():
         # SpaceTopBar not available in this Blender version
         _topbar_draw_handler = None
 
-    # Unregister default topbar
-    try:
-        bpy.utils.unregister_class(bpy.types.TOPBAR_HT_upper_bar)
-    except:
-        pass
+    # DISABLED for v0.2: Keep default topbar visible
+    # try:
+    #     bpy.utils.unregister_class(bpy.types.TOPBAR_HT_upper_bar)
+    # except:
+    #     pass
 
-    try:
-        bpy.utils.unregister_class(bpy.types.TOPBAR_MT_editor_menus)
-    except:
-        pass
+    # try:
+    #     bpy.utils.unregister_class(bpy.types.TOPBAR_MT_editor_menus)
+    # except:
+    #     pass
+    pass
 
 
 def unregister():

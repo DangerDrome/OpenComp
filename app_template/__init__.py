@@ -101,6 +101,62 @@ class OC_OT_splash_about(bpy.types.Operator):
         row.label(text=_OC_VERSION)
 
 
+class OC_MT_nodes(bpy.types.Menu):
+    """OpenComp Nodes menu."""
+    bl_idname = "OC_MT_nodes"
+    bl_label = "Nodes"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.menu("NODE_MT_add", text="Add")
+        layout.separator()
+        layout.operator("node.delete", text="Delete")
+        layout.operator("node.duplicate_move", text="Duplicate")
+        layout.separator()
+        layout.operator("node.mute_toggle", text="Mute")
+        layout.operator("node.hide_toggle", text="Collapse")
+        layout.separator()
+        layout.operator("node.select_all", text="Select All").action = 'SELECT'
+        layout.operator("node.select_all", text="Deselect All").action = 'DESELECT'
+
+
+class OC_MT_render(bpy.types.Menu):
+    """OpenComp Render menu."""
+    bl_idname = "OC_MT_render"
+    bl_label = "Render"
+
+    def draw(self, context):
+        layout = self.layout
+        # Force re-evaluate operator
+        if hasattr(bpy.types, "OC_OT_force_evaluate"):
+            layout.operator("oc.force_evaluate", text="Force Re-evaluate", icon='FILE_REFRESH')
+        else:
+            layout.label(text="Force Re-evaluate (F5)")
+        layout.separator()
+        layout.operator("render.render", text="Render Image", icon='RENDER_STILL')
+        layout.operator("render.render", text="Render Animation", icon='RENDER_ANIMATION').animation = True
+
+
+class OC_MT_window(bpy.types.Menu):
+    """OpenComp Window menu."""
+    bl_idname = "OC_MT_window"
+    bl_label = "Window"
+
+    def draw(self, context):
+        layout = self.layout
+        # NodeGraphQt launcher
+        if hasattr(bpy.types, "OC_OT_launch_nodegraph"):
+            layout.operator("oc.launch_nodegraph", text="Node Graph (Tab)", icon='NODETREE')
+        else:
+            layout.label(text="Node Graph (Tab)")
+        layout.separator()
+        layout.operator("wm.window_new", text="New Window")
+        layout.operator("screen.screen_full_area", text="Toggle Fullscreen")
+        layout.separator()
+        # Area type changes
+        layout.operator("screen.area_dupli", text="Duplicate Area into New Window")
+
+
 class OC_MT_help(bpy.types.Menu):
     """OpenComp Help menu."""
     bl_idname = "OC_MT_help"
@@ -591,14 +647,48 @@ _menu_classes = [
     OC_MT_file,
     OC_MT_edit,
     OC_MT_view,
+    OC_MT_nodes,
+    OC_MT_render,
+    OC_MT_window,
     OC_MT_help,
 ]
+
+class OC_OT_force_evaluate(bpy.types.Operator):
+    """Force re-evaluation of the node graph"""
+    bl_idname = "oc.force_evaluate"
+    bl_label = "Force Re-evaluate"
+    bl_description = "Force re-evaluation of all nodes (F5)"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        # Find OpenComp node tree and trigger evaluation
+        for tree in bpy.data.node_groups:
+            if tree.bl_idname == "OC_NT_compositor":
+                if hasattr(tree, '_eval_needed'):
+                    tree._eval_needed = True
+                # Also mark all nodes as dirty
+                for node in tree.nodes:
+                    if hasattr(node, '_dirty'):
+                        node._dirty = True
+                break
+
+        # Redraw all node editors
+        for area in context.screen.areas:
+            if area.type == 'NODE_EDITOR':
+                area.tag_redraw()
+            elif area.type == 'VIEW_3D':
+                area.tag_redraw()
+
+        self.report({'INFO'}, "Graph re-evaluation triggered")
+        return {'FINISHED'}
+
 
 _operator_classes = [
     OC_OT_splash_about,
     OC_OT_show_add_menu,
     OC_OT_link_drag,
     OC_OT_add_and_link,
+    OC_OT_force_evaluate,
 ]
 
 
@@ -653,19 +743,14 @@ def _opencomp_topbar_draw(self, context):
     layout = self.layout
     region = context.region
 
+    # Debug: print once to confirm this is being called
+    if not hasattr(_opencomp_topbar_draw, '_printed'):
+        _opencomp_topbar_draw._printed = True
+        print("[OpenComp] TOPBAR drawing with v0.2 menus: File, Edit, View, Nodes, Render, Window, Help")
+
     if region.alignment == 'RIGHT':
-        # Right side: scene and view layer selectors (keep useful)
-        window = context.window
-        scene = window.scene
-        layout.template_ID(window, "scene", new="scene.new",
-                           unlink="scene.delete")
-        row = layout.row(align=True)
-        row.template_search(
-            window, "view_layer",
-            scene, "view_layers",
-            new="scene.view_layer_add",
-            unlink="scene.view_layer_remove",
-        )
+        # Right side: empty (no Blender scene/viewlayer selectors)
+        pass
     else:
         # Left side: OpenComp branding + custom menus (no workspace tabs)
         layout.label(text="OpenComp", icon='NODE_COMPOSITING')
@@ -673,6 +758,9 @@ def _opencomp_topbar_draw(self, context):
         layout.menu("OC_MT_file")
         layout.menu("OC_MT_edit")
         layout.menu("OC_MT_view")
+        layout.menu("OC_MT_nodes")
+        layout.menu("OC_MT_render")
+        layout.menu("OC_MT_window")
         layout.menu("OC_MT_help")
         layout.separator_spacer()
         row = layout.row(align=True)
@@ -697,6 +785,54 @@ def _restore_topbar():
         try:
             bpy.types.TOPBAR_HT_upper_bar.draw = _original_topbar_draw
             _original_topbar_draw = None
+        except Exception:
+            pass
+
+
+# ── Node Editor Header Override ─────────────────────────────────────────
+
+_original_node_header_draw = None
+
+
+def _opencomp_node_header_draw(self, context):
+    """Replace Node Editor header with clean OpenComp version."""
+    layout = self.layout
+    snode = context.space_data
+
+    # Only override for OpenComp trees; fall back for others
+    if snode.tree_type != "OC_NT_compositor":
+        if _original_node_header_draw:
+            _original_node_header_draw(self, context)
+        return
+
+    # Just the menus, nothing else
+    layout.menu("OC_MT_file")
+    layout.menu("OC_MT_edit")
+    layout.menu("OC_MT_view")
+    layout.menu("OC_MT_nodes")
+
+    # Empty right side
+    layout.separator_spacer()
+
+
+def _override_node_header():
+    """Replace NODE_HT_header draw with OpenComp version."""
+    global _original_node_header_draw
+    try:
+        header_cls = bpy.types.NODE_HT_header
+        _original_node_header_draw = header_cls.draw
+        header_cls.draw = _opencomp_node_header_draw
+    except Exception as e:
+        print(f"[OpenComp] Node header override skipped: {e}")
+
+
+def _restore_node_header():
+    """Restore original NODE_HT_header draw function."""
+    global _original_node_header_draw
+    if _original_node_header_draw is not None:
+        try:
+            bpy.types.NODE_HT_header.draw = _original_node_header_draw
+            _original_node_header_draw = None
         except Exception:
             pass
 
@@ -760,6 +896,13 @@ def _opencomp_view3d_header_draw(self, context):
 
     layout.separator(type='LINE')
 
+    # Colorspace dropdown
+    row = layout.row(align=True)
+    row.label(text="CS:")
+    row.prop(settings, "colorspace", text="")
+
+    layout.separator(type='LINE')
+
     # Background mode
     row = layout.row(align=True)
     row.label(text="BG:")
@@ -804,6 +947,124 @@ def _restore_view3d_header():
         try:
             bpy.types.VIEW3D_HT_header.draw = _original_view3d_header_draw
             _original_view3d_header_draw = None
+        except Exception:
+            pass
+
+
+# ── Timeline Header Override ───────────────────────────────────────────
+
+_original_time_header_draw = None
+
+
+def _opencomp_time_header_draw(self, context):
+    """Custom timeline header with rearranged playback controls.
+
+    Layout: [FPS] | [Playback Mode] [Start] [Controls] [End] | [Sync Mode]
+    Only applies in TIMELINE mode - other modes use original header.
+    """
+    # Only use custom layout for TIMELINE mode
+    space = context.space_data
+    if space.mode != 'TIMELINE':
+        if _original_time_header_draw:
+            _original_time_header_draw(self, context)
+        return
+
+    layout = self.layout
+    scene = context.scene
+    screen = context.screen
+
+    # Use scale_x to make buttons wider (scale_y causes truncation in headers)
+    # We'll make individual elements larger instead
+
+    # FPS dropdown (far left)
+    row = layout.row(align=True)
+    row.scale_x = 1.3
+    row.prop(scene, "oc_fps_preset", text="")
+    # Show manual input when Custom is selected
+    if scene.oc_fps_preset == 'CUSTOM':
+        sub = row.row(align=True)
+        sub.scale_x = 0.6
+        sub.prop(scene.render, "fps", text="")
+
+    layout.separator_spacer()
+
+    # Playback mode (loop/pingpong/etc) before start frame
+    row = layout.row(align=True)
+    row.scale_x = 1.3
+    row.prop(scene, "oc_playback_mode", text="")
+
+    # Start frame (left of playback controls)
+    row = layout.row(align=True)
+    row.scale_x = 1.0
+    row.prop(scene, "frame_start", text="")
+
+    # Left side: Jump to start, previous frame
+    row = layout.row(align=True)
+    row.scale_x = 1.5
+    row.operator("screen.frame_jump", text="", icon='REW').end = False
+    row.operator("screen.keyframe_jump", text="", icon='PREV_KEYFRAME').next = False
+
+    # Play backwards button
+    row = layout.row(align=True)
+    row.scale_x = 1.5
+    if screen.is_animation_playing and screen.is_scrubbing:
+        row.operator("screen.animation_cancel", text="", icon='PAUSE')
+    else:
+        op = row.operator("screen.animation_play", text="", icon='PLAY_REVERSE')
+        op.reverse = True
+
+    # Current frame number (center)
+    row = layout.row(align=True)
+    row.scale_x = 1.2
+    row.prop(scene, "frame_current", text="")
+
+    # Play forwards button
+    row = layout.row(align=True)
+    row.scale_x = 1.5
+    if screen.is_animation_playing and not screen.is_scrubbing:
+        row.operator("screen.animation_cancel", text="", icon='PAUSE')
+    else:
+        op = row.operator("screen.animation_play", text="", icon='PLAY')
+        op.reverse = False
+
+    # Right side: Next frame, jump to end
+    row = layout.row(align=True)
+    row.scale_x = 1.5
+    row.operator("screen.keyframe_jump", text="", icon='NEXT_KEYFRAME').next = True
+    row.operator("screen.frame_jump", text="", icon='FF').end = True
+
+    # End frame (right of playback controls)
+    row = layout.row(align=True)
+    row.scale_x = 1.0
+    row.prop(scene, "frame_end", text="")
+
+    layout.separator_spacer()
+
+    # Sync mode (far right)
+    row = layout.row(align=True)
+    row.scale_x = 1.3
+    row.prop(scene, "sync_mode", text="")
+
+
+def _override_time_header():
+    """Replace DOPESHEET_HT_header draw with OpenComp layout."""
+    global _original_time_header_draw
+    try:
+        header_cls = bpy.types.DOPESHEET_HT_header
+        _original_time_header_draw = header_cls.draw
+        header_cls.draw = _opencomp_time_header_draw
+        print("[OpenComp] Timeline header override installed")
+    except Exception as e:
+        print(f"[OpenComp] Timeline header override skipped: {e}")
+
+
+def _restore_time_header():
+    """Restore original DOPESHEET_HT_header draw function."""
+    global _original_time_header_draw
+    if _original_time_header_draw is not None:
+        try:
+            bpy.types.DOPESHEET_HT_header.draw = _original_time_header_draw
+            _original_time_header_draw = None
         except Exception:
             pass
 
@@ -1076,11 +1337,11 @@ def _configure_area_chrome():
 
 
 def _configure_viewer_area(area):
-    """Configure a VIEW_3D area as the compositor viewer — clean, chrome-free."""
+    """Configure a VIEW_3D area as the compositor viewer - hide toolbar until we have node-specific tools."""
     for space in area.spaces:
         if space.type == 'VIEW_3D':
-            space.show_region_toolbar = False
-            space.show_region_ui = False
+            space.show_region_toolbar = False  # Hide until we have context-sensitive node tools
+            space.show_region_ui = False  # Hide right sidebar
             space.show_region_tool_header = False
             space.show_gizmo = False
             space.overlay.show_overlays = False
@@ -1124,6 +1385,37 @@ def _configure_properties_area(area, window=None):
                 break
 
 
+def _create_debug_nodes(tree):
+    """Create one of each node type for debugging (only if tree is empty)."""
+    if len(tree.nodes) > 0:
+        return  # Tree already has nodes
+
+    # All node types to create
+    node_types = [
+        'OC_N_read', 'OC_N_constant', 'OC_N_write', 'OC_N_viewer',
+        'OC_N_grade', 'OC_N_cdl', 'OC_N_over', 'OC_N_merge', 'OC_N_shuffle',
+        'OC_N_blur', 'OC_N_sharpen', 'OC_N_transform', 'OC_N_crop',
+        'OC_N_roto', 'OC_N_reroute'
+    ]
+
+    x, y = -400, 200
+    created = []
+    for node_type in node_types:
+        try:
+            node = tree.nodes.new(node_type)
+            node.location = (x, y)
+            created.append(node_type.replace('OC_N_', ''))
+            y -= 100
+            if y < -400:
+                y = 200
+                x += 200
+        except Exception as e:
+            print(f"[OpenComp] Could not create {node_type}: {e}")
+
+    if created:
+        print(f"[OpenComp] Created debug nodes: {', '.join(created)}")
+
+
 def _ensure_opencomp_tree():
     """Create an OpenComp node tree if none exists and assign it to all Node Editor spaces."""
     tree_type = "OC_NT_compositor"
@@ -1137,6 +1429,8 @@ def _ensure_opencomp_tree():
     if oc_tree is None:
         try:
             oc_tree = bpy.data.node_groups.new("OpenComp", tree_type)
+            # Don't create debug nodes - they cause shader errors at startup
+            # _create_debug_nodes(oc_tree)
         except Exception as e:
             print(f"[OpenComp] Could not create node tree: {e}")
             return
@@ -1151,25 +1445,82 @@ def _ensure_opencomp_tree():
                         space.node_tree = oc_tree
 
 
-def _configure_timeline_area(area, window=None):
+def _configure_timeline_area(area, window=None, screen=None):
     """Configure a DOPESHEET_EDITOR area as a Nuke-style timeline strip."""
     for space in area.spaces:
         if space.type == 'DOPESHEET_EDITOR':
             space.mode = 'TIMELINE'
             space.show_region_ui = False
+            # Hide channels/search region
+            try:
+                space.show_region_channels = False
+            except AttributeError:
+                pass
 
     # Flip header to bottom so playback controls sit under the frame ruler
     if window is not None:
         for region in area.regions:
-            if region.type == 'HEADER' and region.alignment != 'BOTTOM':
-                try:
-                    with bpy.context.temp_override(
-                        window=window, area=area, region=region
-                    ):
-                        bpy.ops.screen.region_flip()
-                except Exception:
-                    pass
+            if region.type == 'HEADER':
+                # Check if header is at top (y position > half the area height)
+                header_at_top = region.y > (area.y + area.height // 2)
+                if header_at_top:
+                    try:
+                        with bpy.context.temp_override(
+                            window=window, area=area, region=region, screen=screen
+                        ):
+                            bpy.ops.screen.region_flip()
+                            print("[OpenComp] Flipped timeline header to bottom")
+                    except Exception as e:
+                        print(f"[OpenComp] Timeline header flip failed: {e}")
                 break
+
+    # Zoom timeline to fit frame range (with padding)
+    _zoom_timeline_to_frame_range(area, window, screen)
+
+
+def _zoom_timeline_to_frame_range(area=None, window=None, screen=None):
+    """Zoom the timeline to fit the current frame range (in/out points)."""
+    try:
+        scene = bpy.context.scene
+        frame_start = scene.frame_start
+        frame_end = scene.frame_end
+
+        # Find timeline area if not provided
+        if area is None:
+            for a in bpy.context.screen.areas:
+                if a.type == 'DOPESHEET_EDITOR':
+                    area = a
+                    break
+
+        if area is None:
+            return
+
+        # Find the window region to get view2d
+        for region in area.regions:
+            if region.type == 'WINDOW':
+                # Use view2d to set the visible range
+                view2d = region.view2d
+
+                # Add padding (10% on each side)
+                frame_range = frame_end - frame_start
+                padding = max(frame_range * 0.05, 5)  # At least 5 frames padding
+
+                # Set view bounds
+                view2d.view_to_region(frame_start - padding, 0)
+                view2d.view_to_region(frame_end + padding, 0)
+
+                # Alternative: use operator to view all
+                if window is not None:
+                    try:
+                        with bpy.context.temp_override(
+                            window=window, area=area, region=region, screen=screen
+                        ):
+                            bpy.ops.action.view_all()
+                    except Exception:
+                        pass
+                break
+    except Exception as e:
+        print(f"[OpenComp] Timeline zoom failed: {e}")
 
 
 
@@ -1442,8 +1793,12 @@ def _deferred_ui_setup():
 
         screen = window.screen
 
-        # Create left toolbar area (split from NODE_EDITOR)
-        _try_create_left_toolbar(window, screen)
+        # DISABLED: Left toolbar creates IMAGE_EDITOR areas we don't want
+        # Using Blender's native tool flyout menus instead
+        # _try_create_left_toolbar(window, screen)
+
+        # Merge two PROPERTIES panels into one
+        _try_join_properties(window, screen)
 
         # Configure areas by type
         for area in screen.areas:
@@ -1457,6 +1812,8 @@ def _deferred_ui_setup():
                 _configure_node_editor_area(area)
             elif area.type == 'PROPERTIES':
                 _configure_properties_area(area, window=window)
+            elif area.type == 'DOPESHEET_EDITOR':
+                _configure_timeline_area(area, window=window, screen=screen)
 
         # Assign OpenComp node tree
         _ensure_opencomp_tree()
@@ -1494,6 +1851,10 @@ def _configure_ui_on_load(dummy):
     if scene.frame_current < scene.frame_start or scene.frame_current > scene.frame_end:
         scene.frame_current = scene.frame_start
 
+    # Set default FPS to 24 (film standard)
+    scene.render.fps = 24
+    scene.render.fps_base = 1.0
+
     # Hide built-in scene panels so only OC panels show in Properties area
     _hide_builtin_scene_panels()
 
@@ -1529,6 +1890,9 @@ def _apply_dark_theme():
     # Panel border - match background so it's not jarring
     ui.editor_border = (0.12, 0.12, 0.12)
 
+    # CRITICAL: Restore icon/text visibility (startup.blend sets this to 0.0)
+    ui.icon_alpha = 1.0
+
     # General UI widget colors - wrap in try/except for safety
     try:
         ui.wcol_regular.inner = (0.22, 0.22, 0.22, 1.0)
@@ -1547,8 +1911,55 @@ def _apply_dark_theme():
 
         ui.wcol_num.inner = (0.2, 0.2, 0.2, 1.0)
         ui.wcol_num.text = (0.85, 0.85, 0.85)
-    except Exception:
-        pass
+
+        # Menu widget colors (for topbar menus)
+        ui.wcol_menu.inner = (0.22, 0.22, 0.22, 1.0)
+        ui.wcol_menu.inner_sel = (0.35, 0.35, 0.35, 1.0)
+        ui.wcol_menu.text = (0.9, 0.9, 0.9)  # Light text
+        ui.wcol_menu.text_sel = (1.0, 1.0, 1.0)
+
+        # Menu item colors (dropdown items)
+        ui.wcol_menu_item.inner = (0.20, 0.20, 0.20, 1.0)
+        ui.wcol_menu_item.inner_sel = (0.3, 0.5, 0.3, 1.0)  # Green highlight
+        ui.wcol_menu_item.text = (0.9, 0.9, 0.9)
+        ui.wcol_menu_item.text_sel = (1.0, 1.0, 1.0)
+
+        # Menu background
+        ui.wcol_menu_back.inner = (0.18, 0.18, 0.18, 1.0)
+        ui.wcol_menu_back.outline = (0.1, 0.1, 0.1, 1.0)
+
+        # Pulldown menus (topbar menu buttons) - BRIGHT TEXT
+        ui.wcol_pulldown.inner = (0.2, 0.2, 0.2, 1.0)
+        ui.wcol_pulldown.inner_sel = (0.3, 0.3, 0.3, 1.0)
+        ui.wcol_pulldown.outline = (0.15, 0.15, 0.15, 1.0)
+        ui.wcol_pulldown.text = (1.0, 1.0, 1.0)  # Pure white
+        ui.wcol_pulldown.text_sel = (1.0, 1.0, 0.0)  # Yellow when selected
+
+        # Also set the "option" widget which might be used
+        ui.wcol_option.inner = (0.2, 0.2, 0.2, 1.0)
+        ui.wcol_option.text = (1.0, 1.0, 1.0)
+
+        # Radio buttons (sometimes used in headers)
+        ui.wcol_radio.inner = (0.2, 0.2, 0.2, 1.0)
+        ui.wcol_radio.text = (1.0, 1.0, 1.0)
+
+    except Exception as e:
+        print(f"[OpenComp] Widget theme error: {e}")
+
+    # Topbar (top menu bar) - dark background, light text
+    # Note: text colors are RGB (3 values), backgrounds are RGBA (4 values)
+    try:
+        theme.topbar.space.back = (0.15, 0.15, 0.15)
+        theme.topbar.space.header = (0.15, 0.15, 0.15, 1.0)
+        theme.topbar.space.header_text = (0.95, 0.95, 0.95)  # RGB only
+        theme.topbar.space.header_text_hi = (1.0, 1.0, 1.0)  # RGB only
+        theme.topbar.space.text = (0.95, 0.95, 0.95)  # RGB only
+        theme.topbar.space.text_hi = (1.0, 1.0, 1.0)  # RGB only
+        theme.topbar.space.button = (0.2, 0.2, 0.2, 1.0)
+        theme.topbar.space.button_text = (0.95, 0.95, 0.95)  # RGB only
+        theme.topbar.space.button_text_hi = (1.0, 1.0, 1.0)  # RGB only
+    except Exception as e:
+        print(f"[OpenComp] Topbar theme error: {e}")
 
     # Node editor - dark background
     try:
@@ -1682,9 +2093,13 @@ def _setup_keymaps():
     kmi = km_nav.keymap_items.new('oc.link_drag', 'LEFTMOUSE', 'CLICK_DRAG', ctrl=True)
     kmi.properties.detach = True
 
-    # Tab to show add menu and auto-connect to active node
-    # Workflow: select node -> Tab -> choose node -> new node is connected
-    km_nav.keymap_items.new('oc.add_and_link', 'TAB', 'PRESS')
+    # Tab to open NodeGraphQt (if available) or add menu
+    # Note: We register Tab for NodeGraphQt launch - operator checks if Qt is available
+    if hasattr(bpy.types, 'OC_OT_launch_nodegraph'):
+        km_nav.keymap_items.new('oc.launch_nodegraph', 'TAB', 'PRESS')
+    else:
+        # Fallback to add and link if NodeGraphQt not available
+        km_nav.keymap_items.new('oc.add_and_link', 'TAB', 'PRESS')
 
     # Cut links (Ctrl+Right mouse drag)
     km_nav.keymap_items.new('node.links_cut', 'RIGHTMOUSE', 'CLICK_DRAG', ctrl=True)
@@ -1740,6 +2155,17 @@ def _setup_keymaps():
     # Join into frame / detach from frame
     km_edit.keymap_items.new('node.join', 'J', 'PRESS', ctrl=True)
     km_edit.keymap_items.new('node.detach', 'P', 'PRESS', alt=True)
+
+    # F5 — Force re-evaluate graph
+    km_edit.keymap_items.new('oc.force_evaluate', 'F5', 'PRESS')
+
+    # ── Window-level shortcuts ────────────────────────────────────────────
+    # These work from any area, not just Node Editor
+    km_window = kc.keymaps.new(name='Window', space_type='EMPTY')
+    _oc_keymaps.append(km_window)
+
+    # F5 from any area
+    km_window.keymap_items.new('oc.force_evaluate', 'F5', 'PRESS')
 
     print("[OpenComp] Keymaps installed")
 
@@ -1835,10 +2261,270 @@ def _teardown_keymaps():
     print("[OpenComp] Keymaps removed")
 
 
+# ── Compositor Viewer Tools ────────────────────────────────────────────
+
+class OC_OT_viewer_fit(bpy.types.Operator):
+    """Fit the viewer to show the entire image"""
+    bl_idname = "oc.viewer_fit"
+    bl_label = "Fit View"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        bpy.ops.view3d.view_all(center=True)
+        return {'FINISHED'}
+
+
+class OC_OT_viewer_zoom_1to1(bpy.types.Operator):
+    """Zoom to 100% (1:1 pixel ratio)"""
+    bl_idname = "oc.viewer_zoom_1to1"
+    bl_label = "1:1 Zoom"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        space.region_3d.view_perspective = 'ORTHO'
+                        space.region_3d.view_distance = 10.0
+                        break
+        return {'FINISHED'}
+
+
+class OC_OT_viewer_zoom_in(bpy.types.Operator):
+    """Zoom in on the viewer"""
+    bl_idname = "oc.viewer_zoom_in"
+    bl_label = "Zoom In"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        bpy.ops.view3d.zoom(delta=1)
+        return {'FINISHED'}
+
+
+class OC_OT_viewer_zoom_out(bpy.types.Operator):
+    """Zoom out on the viewer"""
+    bl_idname = "oc.viewer_zoom_out"
+    bl_label = "Zoom Out"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        bpy.ops.view3d.zoom(delta=-1)
+        return {'FINISHED'}
+
+
+class OC_OT_viewer_pan(bpy.types.Operator):
+    """Pan the viewer"""
+    bl_idname = "oc.viewer_pan"
+    bl_label = "Pan"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        bpy.ops.view3d.move('INVOKE_DEFAULT')
+        return {'FINISHED'}
+
+
+class OC_OT_viewer_reset(bpy.types.Operator):
+    """Reset the viewer to default position"""
+    bl_idname = "oc.viewer_reset"
+    bl_label = "Reset View"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        bpy.ops.view3d.view_all(center=True)
+        return {'FINISHED'}
+
+
+# Custom WorkSpaceTools for the compositor viewer
+class OC_TOOL_pan(bpy.types.WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+    bl_idname = "oc.tool_pan"
+    bl_label = "Pan"
+    bl_description = "Pan the viewer"
+    bl_icon = "ops.generic.cursor"
+    bl_widget = None
+    bl_keymap = (
+        ("view3d.move", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.move", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
+    )
+
+    def draw_settings(context, layout, tool):
+        pass
+
+
+class OC_TOOL_zoom(bpy.types.WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+    bl_idname = "oc.tool_zoom"
+    bl_label = "Zoom"
+    bl_description = "Zoom the viewer"
+    bl_icon = "ops.generic.select"
+    bl_widget = None
+    bl_keymap = (
+        ("view3d.zoom", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.zoom", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
+    )
+
+    def draw_settings(context, layout, tool):
+        pass
+
+
+# Panel for viewer tools in the left toolbar (T-panel)
+class OC_PT_viewer_tools(bpy.types.Panel):
+    """Compositor viewer tools panel"""
+    bl_label = ""
+    bl_idname = "OC_PT_viewer_tools"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'TOOLS'
+    bl_category = "Tools"
+    bl_options = {'HIDE_HEADER'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.scale_y = 1.5
+
+        col = layout.column(align=True)
+        col.operator("oc.viewer_pan", text="Pan", icon='VIEW_PAN')
+        col.operator("oc.viewer_fit", text="Fit", icon='FULLSCREEN_ENTER')
+        col.operator("oc.viewer_zoom_1to1", text="1:1", icon='ZOOM_PREVIOUS')
+        col.operator("oc.viewer_zoom_in", text="Zoom +", icon='ZOOM_IN')
+        col.operator("oc.viewer_zoom_out", text="Zoom -", icon='ZOOM_OUT')
+        col.operator("oc.viewer_reset", text="Reset", icon='HOME')
+
+        layout.separator()
+
+        col = layout.column(align=True)
+        col.label(text="Channels")
+        row = col.row(align=True)
+        row.scale_x = 1.0
+        row.operator("oc.viewer_fit", text="RGB", depress=True)
+        row = col.row(align=True)
+        row.operator("oc.viewer_fit", text="R")
+        row.operator("oc.viewer_fit", text="G")
+        row.operator("oc.viewer_fit", text="B")
+        row = col.row(align=True)
+        row.operator("oc.viewer_fit", text="A")
+        row.operator("oc.viewer_fit", text="L")
+
+        layout.separator()
+
+        col = layout.column(align=True)
+        col.label(text="Background")
+        space = context.space_data
+        if space.type == 'VIEW_3D':
+            col.prop(space.shading, "background_type", text="")
+            if space.shading.background_type == 'VIEWPORT':
+                col.prop(space.shading, "background_color", text="")
+
+
+# List of viewer tool classes (operators and panels)
+_viewer_tool_classes = [
+    OC_OT_viewer_fit,
+    OC_OT_viewer_zoom_1to1,
+    OC_OT_viewer_zoom_in,
+    OC_OT_viewer_zoom_out,
+    OC_OT_viewer_pan,
+    OC_OT_viewer_reset,
+    OC_PT_viewer_tools,
+]
+
+# WorkSpaceTools to register separately
+_viewer_workspace_tools = [
+    OC_TOOL_pan,
+    OC_TOOL_zoom,
+]
+
+# Default VIEW_3D tools to unregister
+_default_view3d_tools = [
+    "builtin.select_box",
+    "builtin.select_circle",
+    "builtin.select_lasso",
+    "builtin.cursor",
+    "builtin.move",
+    "builtin.rotate",
+    "builtin.scale",
+    "builtin.transform",
+    "builtin.annotate",
+    "builtin.annotate_line",
+    "builtin.annotate_polygon",
+    "builtin.annotate_eraser",
+    "builtin.measure",
+    "builtin.add_cube",
+]
+
+
+def _unregister_default_view3d_tools():
+    """Unregister default VIEW_3D tools to clean up the toolbar."""
+    from bl_ui.space_toolsystem_common import ToolDef
+    from bl_ui.space_toolsystem_toolbar import VIEW3D_PT_tools_active
+
+    for tool_id in _default_view3d_tools:
+        try:
+            bpy.utils.unregister_tool(VIEW3D_PT_tools_active, tool_id)
+            print(f"[OpenComp] Unregistered tool: {tool_id}")
+        except Exception as e:
+            pass  # Tool may not exist or already unregistered
+
+
+def _register_compositor_tools():
+    """Register our custom compositor tools for the VIEW_3D toolbar."""
+    from bl_ui.space_toolsystem_toolbar import VIEW3D_PT_tools_active
+
+    # Register our custom tools
+    for tool_cls in _viewer_workspace_tools:
+        try:
+            bpy.utils.register_tool(VIEW3D_PT_tools_active, tool_cls, after=None, separator=False)
+            print(f"[OpenComp] Registered tool: {tool_cls.bl_idname}")
+        except Exception as e:
+            print(f"[OpenComp] Failed to register tool {tool_cls.bl_idname}: {e}")
+
+
 # ── Registration ───────────────────────────────────────────────────────
+
+def _update_fps_preset(self, context):
+    """Update scene FPS when preset changes."""
+    preset = self.oc_fps_preset
+    if preset != 'CUSTOM':
+        self.render.fps = int(preset)
+        self.render.fps_base = 1.0
+
 
 def register():
     """Register app template — called by Blender on template activation."""
+    # Register custom FPS preset property on Scene
+    bpy.types.Scene.oc_fps_preset = bpy.props.EnumProperty(
+        name="FPS Preset",
+        description="Frame rate preset",
+        items=[
+            ('24', "24", "24 fps (Film)"),
+            ('25', "25", "25 fps (PAL)"),
+            ('30', "30", "30 fps (NTSC)"),
+            ('48', "48", "48 fps (HFR Film)"),
+            ('60', "60", "60 fps (Games/Web)"),
+            ('120', "120", "120 fps (High Speed)"),
+            ('240', "240", "240 fps (Slow Motion)"),
+            ('CUSTOM', "Custom", "Custom frame rate"),
+        ],
+        default='24',
+        update=_update_fps_preset,
+    )
+
+    # Register custom playback mode property on Scene
+    bpy.types.Scene.oc_playback_mode = bpy.props.EnumProperty(
+        name="Playback Mode",
+        description="Playback loop behavior",
+        items=[
+            ('LOOP', "Loop", "Loop continuously within frame range"),
+            ('ONCE', "Once", "Play once and stop at end"),
+            ('PINGPONG', "Ping-Pong", "Bounce back and forth"),
+        ],
+        default='LOOP',
+    )
+
     # Register operator classes
     for cls in _operator_classes:
         try:
@@ -1848,6 +2534,13 @@ def register():
 
     # Register custom menu classes
     for cls in _menu_classes:
+        try:
+            bpy.utils.register_class(cls)
+        except RuntimeError:
+            pass
+
+    # Register viewer tool classes
+    for cls in _viewer_tool_classes:
         try:
             bpy.utils.register_class(cls)
         except RuntimeError:
@@ -1867,13 +2560,18 @@ def register():
         pass
 
     _override_topbar()
+    _override_node_header()
     _override_view3d_header()
+    _override_time_header()
     _override_splash()
     _override_splash_about()
     _override_quick_setup()
     _apply_dark_theme()
     _clear_default_node_keymaps()
     _setup_keymaps()
+
+    # NOTE: Context-sensitive node tools (like Nuke) will be added later
+    # For now, the VIEW_3D toolbar is hidden since 3D tools aren't useful
 
     # Zoom at mouse cursor (industry standard, not center of panel)
     bpy.context.preferences.inputs.use_zoom_to_mouse = True
@@ -1901,9 +2599,17 @@ def register():
 
 def unregister():
     """Unregister app template."""
+    # Remove custom properties
+    if hasattr(bpy.types.Scene, "oc_fps_preset"):
+        del bpy.types.Scene.oc_fps_preset
+    if hasattr(bpy.types.Scene, "oc_playback_mode"):
+        del bpy.types.Scene.oc_playback_mode
+
     _teardown_keymaps()
     _restore_topbar()
+    _restore_node_header()
     _restore_view3d_header()
+    _restore_time_header()
     _restore_splash()
     _restore_splash_about()
     _restore_quick_setup()
@@ -1917,6 +2623,13 @@ def unregister():
 
     if _track_active_node in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_track_active_node)
+
+    # Unregister viewer tool classes
+    for cls in reversed(_viewer_tool_classes):
+        try:
+            bpy.utils.unregister_class(cls)
+        except RuntimeError:
+            pass
 
     # Unregister panel classes
     for cls in reversed(_panel_classes):

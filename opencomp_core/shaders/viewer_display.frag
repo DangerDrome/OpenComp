@@ -1,8 +1,8 @@
 /* OpenComp — viewer_display.frag
    Display shader for the viewer with gain, gamma, channel isolation,
-   false colour, clipping indicators, zoom, pan, and ROI overlay.
+   false colour, clipping indicators, zoom, pan, ROI overlay, and LUT.
 
-   In:  u_image  RGBA32F from node graph output
+   In:  u_image  RGBA32F from node graph output (linear scene-referred)
    Out: display-ready RGBA (viewer only — not pipeline)
 */
 
@@ -20,11 +20,74 @@ uniform vec2      u_resolution;
 uniform vec2      u_image_resolution;
 uniform float     u_bg_mode;
 uniform vec3      u_bg_color;
+uniform float     u_lut_mode;  /* 0=sRGB, 1=Linear, 2=AgX, 3=Filmic */
 
 in  vec2 v_uv;
 out vec4 out_color;
 
 const vec3 LUMA_COEFF = vec3(0.2126, 0.7152, 0.0722);
+
+/* ─── View Transform Functions ─────────────────────────────────────────── */
+
+/* sRGB OETF (linear to sRGB gamma) */
+vec3 linear_to_srgb(vec3 c) {
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0/2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
+
+/* AgX tone mapping (simplified) — attempt to match Blender's AgX */
+vec3 agx_tonemap(vec3 c) {
+    /* AgX log encoding */
+    const float agx_min = -10.0;
+    const float agx_max = 6.5;
+    c = max(c, vec3(1e-10));
+    c = log2(c);
+    c = (c - agx_min) / (agx_max - agx_min);
+    c = clamp(c, 0.0, 1.0);
+
+    /* AgX sigmoid curve approximation */
+    vec3 x = c;
+    vec3 x2 = x * x;
+    vec3 x4 = x2 * x2;
+    c = 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+
+    return clamp(c, 0.0, 1.0);
+}
+
+/* Filmic tone mapping (attempt to match Blender's Filmic) */
+vec3 filmic_tonemap(vec3 c) {
+    /* Attempt to match Blender Filmic's contrast curve */
+    c = max(c, vec3(0.0));
+
+    /* Log encoding similar to Filmic */
+    c = log2(c + 0.001) / 10.0 + 0.5;
+    c = clamp(c, 0.0, 1.0);
+
+    /* S-curve contrast */
+    c = c * c * (3.0 - 2.0 * c);
+
+    return c;
+}
+
+/* Apply view transform based on u_lut_mode */
+vec3 apply_view_transform(vec3 linear_col) {
+    if (u_lut_mode < 0.5) {
+        /* sRGB (Standard) */
+        return linear_to_srgb(linear_col);
+    } else if (u_lut_mode < 1.5) {
+        /* Linear (Raw) — no transform, just clamp */
+        return clamp(linear_col, 0.0, 1.0);
+    } else if (u_lut_mode < 2.5) {
+        /* AgX */
+        vec3 tonemapped = agx_tonemap(linear_col);
+        return linear_to_srgb(tonemapped);
+    } else {
+        /* Filmic */
+        vec3 tonemapped = filmic_tonemap(linear_col);
+        return linear_to_srgb(tonemapped);
+    }
+}
 
 vec3 false_color_map(float luma) {
     if (luma < 0.0)    return vec3(0.0, 0.0, 0.8);
@@ -73,28 +136,41 @@ void main() {
     vec4 src = texture(u_image, uv);
     vec3 col = src.rgb;
 
-    /* Gain (linear exposure multiplier) */
+    /* Gain (linear exposure multiplier) — applied in linear space */
     col *= u_gain;
 
-    /* Display gamma */
-    col = pow(max(col, vec3(0.0)), vec3(1.0 / max(u_gamma, 0.0001)));
+    /* Store linear values for clipping detection */
+    vec3 linear_col = col;
 
-    /* Channel isolation */
-    if (u_channel > 0.5 && u_channel < 1.5)
+    /* Channel isolation (before view transform for proper linear handling) */
+    bool single_channel = false;
+    if (u_channel > 0.5 && u_channel < 1.5) {
         col = vec3(col.r);
-    else if (u_channel > 1.5 && u_channel < 2.5)
+        single_channel = true;
+    } else if (u_channel > 1.5 && u_channel < 2.5) {
         col = vec3(col.g);
-    else if (u_channel > 2.5 && u_channel < 3.5)
+        single_channel = true;
+    } else if (u_channel > 2.5 && u_channel < 3.5) {
         col = vec3(col.b);
-    else if (u_channel > 3.5 && u_channel < 4.5)
+        single_channel = true;
+    } else if (u_channel > 3.5 && u_channel < 4.5) {
         col = vec3(src.a);
-    else if (u_channel > 4.5) {
-        float lum = dot(src.rgb * u_gain, LUMA_COEFF);
-        lum = pow(max(lum, 0.0), 1.0 / max(u_gamma, 0.0001));
+        single_channel = true;
+    } else if (u_channel > 4.5) {
+        float lum = dot(linear_col, LUMA_COEFF);
         col = vec3(lum);
+        single_channel = true;
     }
 
-    /* False colour — overrides channel isolation */
+    /* Apply view transform (LUT) */
+    col = apply_view_transform(col);
+
+    /* Additional gamma adjustment on top of view transform */
+    if (abs(u_gamma - 1.0) > 0.001) {
+        col = pow(max(col, vec3(0.0)), vec3(1.0 / max(u_gamma, 0.0001)));
+    }
+
+    /* False colour — overrides channel isolation, works in linear space */
     if (u_false_color > 0.5) {
         float luma = dot(src.rgb * u_gain, LUMA_COEFF);
         col = false_color_map(luma);
@@ -102,10 +178,9 @@ void main() {
 
     /* Clipping indicators: red = over white, blue = under black */
     if (u_clipping > 0.5) {
-        vec3 raw = src.rgb * u_gain;
-        if (raw.r > 1.0 || raw.g > 1.0 || raw.b > 1.0)
+        if (linear_col.r > 1.0 || linear_col.g > 1.0 || linear_col.b > 1.0)
             col = mix(col, vec3(1.0, 0.0, 0.0), 0.7);
-        if (raw.r < 0.0 || raw.g < 0.0 || raw.b < 0.0)
+        if (linear_col.r < 0.0 || linear_col.g < 0.0 || linear_col.b < 0.0)
             col = mix(col, vec3(0.0, 0.0, 1.0), 0.7);
     }
 

@@ -54,8 +54,8 @@ def _apply_theme():
         # General UI
         theme.user_interface.wcol_regular.inner = (0.22, 0.22, 0.22, 1.0)
 
-        # Hide region toggle arrows by making icons invisible
-        theme.user_interface.icon_alpha = 0.0
+        # Keep icons visible (setting to 0.0 hides ALL icons including menu text)
+        theme.user_interface.icon_alpha = 1.0
 
         # Node editor - dark background (back is RGB, wire is RGBA)
         theme.node_editor.space.back = (0.16, 0.16, 0.16)

@@ -25,8 +25,90 @@ bl_info = {
 # 9. openclaw_integration (last — depends on everything)
 
 import bpy
-import nodeitems_utils
-from nodeitems_utils import NodeCategory, NodeItem
+
+
+# ── Node Add menu override ─────────────────────────────────────────────
+
+_original_node_add_menu_draw = None
+
+
+def _opencomp_node_add_menu_draw(self, context):
+    """NODE_MT_add override — shows our nodes when in OpenComp tree."""
+    snode = context.space_data
+    tree_type = getattr(snode, 'tree_type', '')
+
+    # Only override for OpenComp trees; fall back for others
+    if tree_type != "OC_NT_compositor":
+        if _original_node_add_menu_draw:
+            _original_node_add_menu_draw(self, context)
+        return
+    layout = self.layout
+
+    # Input
+    layout.label(text="Input", icon='IMPORT')
+    layout.operator("oc.add_node", text="Read").node_type = "OC_N_read"
+    layout.operator("oc.add_node", text="Constant").node_type = "OC_N_constant"
+    layout.separator()
+
+    # Output
+    layout.label(text="Output", icon='EXPORT')
+    layout.operator("oc.add_node", text="Write").node_type = "OC_N_write"
+    layout.operator("oc.add_node", text="Viewer").node_type = "OC_N_viewer"
+    layout.separator()
+
+    # Color
+    layout.label(text="Color", icon='COLOR')
+    layout.operator("oc.add_node", text="Grade").node_type = "OC_N_grade"
+    layout.operator("oc.add_node", text="CDL").node_type = "OC_N_cdl"
+    layout.separator()
+
+    # Merge
+    layout.label(text="Merge", icon='SELECT_EXTEND')
+    layout.operator("oc.add_node", text="Over").node_type = "OC_N_over"
+    layout.operator("oc.add_node", text="Merge").node_type = "OC_N_merge"
+    layout.operator("oc.add_node", text="Shuffle").node_type = "OC_N_shuffle"
+    layout.separator()
+
+    # Filter
+    layout.label(text="Filter", icon='MATFLUID')
+    layout.operator("oc.add_node", text="Blur").node_type = "OC_N_blur"
+    layout.operator("oc.add_node", text="Sharpen").node_type = "OC_N_sharpen"
+    layout.separator()
+
+    # Transform
+    layout.label(text="Transform", icon='ORIENTATION_GLOBAL')
+    layout.operator("oc.add_node", text="Transform").node_type = "OC_N_transform"
+    layout.operator("oc.add_node", text="Crop").node_type = "OC_N_crop"
+    layout.separator()
+
+    # Draw
+    layout.label(text="Draw", icon='MESH_CIRCLE')
+    layout.operator("oc.add_node", text="Roto").node_type = "OC_N_roto"
+    layout.separator()
+
+    # Utility
+    layout.label(text="Utility", icon='ARROW_LEFTRIGHT')
+    layout.operator("oc.add_node", text="Reroute").node_type = "OC_N_reroute"
+
+
+def _override_node_add_menu():
+    global _original_node_add_menu_draw
+    try:
+        cls = bpy.types.NODE_MT_add
+        _original_node_add_menu_draw = cls.draw
+        cls.draw = _opencomp_node_add_menu_draw
+    except Exception as e:
+        print(f"[OpenComp] Node add menu override skipped: {e}")
+
+
+def _restore_node_add_menu():
+    global _original_node_add_menu_draw
+    if _original_node_add_menu_draw is not None:
+        try:
+            bpy.types.NODE_MT_add.draw = _original_node_add_menu_draw
+            _original_node_add_menu_draw = None
+        except Exception:
+            pass
 
 
 # ── Node context menu override ─────────────────────────────────────────
@@ -174,12 +256,139 @@ class OC_PT_active_node_properties(bpy.types.Panel):
             node.draw_buttons(context, layout)
 
 
-class OpenCompNodeCategory(NodeCategory):
-    """Node category that only appears in OC_NT_compositor trees."""
-    @classmethod
-    def poll(cls, context):
-        sd = getattr(context, "space_data", None)
-        return sd is not None and getattr(sd, "tree_type", "") == "OC_NT_compositor"
+# ── Custom Add Menu (Blender 5.0 compatible) ─────────────────────────────
+# nodeitems_utils is deprecated in Blender 4.0+. Add menu is defined via
+# NodeTree.draw_add() classmethod (in tree.py). These menu classes are
+# legacy fallbacks that append to NODE_MT_add for broader compatibility.
+
+def _is_opencomp_tree(context):
+    """Check if we're in an OpenComp node tree."""
+    sd = getattr(context, "space_data", None)
+    return sd is not None and getattr(sd, "tree_type", "") == "OC_NT_compositor"
+
+
+class OC_MT_add_input(bpy.types.Menu):
+    bl_idname = "OC_MT_add_input"
+    bl_label = "Input"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("oc.add_node", text="Read", icon='IMAGE_DATA').node_type = "OC_N_read"
+        layout.operator("oc.add_node", text="Constant", icon='COLOR').node_type = "OC_N_constant"
+
+
+class OC_MT_add_output(bpy.types.Menu):
+    bl_idname = "OC_MT_add_output"
+    bl_label = "Output"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("oc.add_node", text="Write", icon='EXPORT').node_type = "OC_N_write"
+        layout.operator("oc.add_node", text="Viewer", icon='HIDE_OFF').node_type = "OC_N_viewer"
+
+
+class OC_MT_add_color(bpy.types.Menu):
+    bl_idname = "OC_MT_add_color"
+    bl_label = "Color"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("oc.add_node", text="Grade", icon='COLOR').node_type = "OC_N_grade"
+        layout.operator("oc.add_node", text="CDL", icon='COLOR').node_type = "OC_N_cdl"
+
+
+class OC_MT_add_merge(bpy.types.Menu):
+    bl_idname = "OC_MT_add_merge"
+    bl_label = "Merge"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("oc.add_node", text="Over", icon='SELECT_EXTEND').node_type = "OC_N_over"
+        layout.operator("oc.add_node", text="Merge", icon='SELECT_EXTEND').node_type = "OC_N_merge"
+        layout.operator("oc.add_node", text="Shuffle", icon='MOD_ARRAY').node_type = "OC_N_shuffle"
+
+
+class OC_MT_add_filter(bpy.types.Menu):
+    bl_idname = "OC_MT_add_filter"
+    bl_label = "Filter"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("oc.add_node", text="Blur", icon='MATFLUID').node_type = "OC_N_blur"
+        layout.operator("oc.add_node", text="Sharpen", icon='SHARPCURVE').node_type = "OC_N_sharpen"
+
+
+class OC_MT_add_transform(bpy.types.Menu):
+    bl_idname = "OC_MT_add_transform"
+    bl_label = "Transform"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("oc.add_node", text="Transform", icon='ORIENTATION_GLOBAL').node_type = "OC_N_transform"
+        layout.operator("oc.add_node", text="Crop", icon='SELECT_INTERSECT').node_type = "OC_N_crop"
+
+
+class OC_MT_add_draw(bpy.types.Menu):
+    bl_idname = "OC_MT_add_draw"
+    bl_label = "Draw"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("oc.add_node", text="Roto", icon='MESH_CIRCLE').node_type = "OC_N_roto"
+
+
+class OC_MT_add_utility(bpy.types.Menu):
+    bl_idname = "OC_MT_add_utility"
+    bl_label = "Utility"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("oc.add_node", text="Reroute", icon='ARROW_LEFTRIGHT').node_type = "OC_N_reroute"
+
+
+class OC_MT_add(bpy.types.Menu):
+    """OpenComp Add Node Menu"""
+    bl_idname = "OC_MT_add"
+    bl_label = "Add"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.menu("OC_MT_add_input", icon='IMPORT')
+        layout.menu("OC_MT_add_output", icon='EXPORT')
+        layout.menu("OC_MT_add_color", icon='COLOR')
+        layout.menu("OC_MT_add_merge", icon='SELECT_EXTEND')
+        layout.menu("OC_MT_add_filter", icon='MATFLUID')
+        layout.menu("OC_MT_add_transform", icon='ORIENTATION_GLOBAL')
+        layout.menu("OC_MT_add_draw", icon='MESH_CIRCLE')
+        layout.menu("OC_MT_add_utility", icon='ARROW_LEFTRIGHT')
+
+
+_add_menu_classes = [
+    OC_MT_add_input,
+    OC_MT_add_output,
+    OC_MT_add_color,
+    OC_MT_add_merge,
+    OC_MT_add_filter,
+    OC_MT_add_transform,
+    OC_MT_add_draw,
+    OC_MT_add_utility,
+    OC_MT_add,
+]
+
+
+def _draw_opencomp_add_menu(self, context):
+    """Append OpenComp categories to NODE_MT_add when in OpenComp tree."""
+    if _is_opencomp_tree(context):
+        layout = self.layout
+        layout.separator()
+        layout.menu("OC_MT_add_input", icon='IMPORT')
+        layout.menu("OC_MT_add_output", icon='EXPORT')
+        layout.menu("OC_MT_add_color", icon='COLOR')
+        layout.menu("OC_MT_add_merge", icon='SELECT_EXTEND')
+        layout.menu("OC_MT_add_filter", icon='MATFLUID')
+        layout.menu("OC_MT_add_transform", icon='ORIENTATION_GLOBAL')
+        layout.menu("OC_MT_add_draw", icon='MESH_CIRCLE')
+        layout.menu("OC_MT_add_utility", icon='ARROW_LEFTRIGHT')
 
 
 # All node modules with their classes
@@ -193,6 +402,7 @@ def _import_nodes():
     from .nodes.merge import over, merge, shuffle
     from .nodes.filter import blur, sharpen
     from .nodes.transform import transform, crop
+    from .nodes.draw import roto
     from .nodes.utility import reroute
     from .nodes import viewer  # import the package, not just viewer.py
     from .nodes import node_panel  # Node Editor sidebar panels
@@ -202,6 +412,7 @@ def _import_nodes():
         over, merge, shuffle,
         blur, sharpen,
         transform, crop,
+        roto,
         reroute,
         viewer,
         node_panel,
@@ -210,46 +421,6 @@ def _import_nodes():
 
 # Node categories for the Add menu
 _category_name = "OC_NODE_CATEGORIES"
-
-def _draw_canvas_button(self, context):
-    """Draw the 'Open Canvas' button in the Node Editor header."""
-    if context.space_data.tree_type == "OC_NT_compositor":
-        # Only show if the operator exists
-        if hasattr(bpy.types, "OC_OT_launch_canvas"):
-            layout = self.layout
-            layout.operator("oc.launch_canvas", text="", icon='WINDOW')
-
-
-_node_categories = [
-    OpenCompNodeCategory("OC_CAT_INPUT", "Input", items=[
-        NodeItem("OC_N_read"),
-        NodeItem("OC_N_constant"),
-    ]),
-    OpenCompNodeCategory("OC_CAT_OUTPUT", "Output", items=[
-        NodeItem("OC_N_write"),
-        NodeItem("OC_N_viewer"),
-    ]),
-    OpenCompNodeCategory("OC_CAT_COLOR", "Color", items=[
-        NodeItem("OC_N_grade"),
-        NodeItem("OC_N_cdl"),
-    ]),
-    OpenCompNodeCategory("OC_CAT_MERGE", "Merge", items=[
-        NodeItem("OC_N_over"),
-        NodeItem("OC_N_merge"),
-        NodeItem("OC_N_shuffle"),
-    ]),
-    OpenCompNodeCategory("OC_CAT_FILTER", "Filter", items=[
-        NodeItem("OC_N_blur"),
-        NodeItem("OC_N_sharpen"),
-    ]),
-    OpenCompNodeCategory("OC_CAT_TRANSFORM", "Transform", items=[
-        NodeItem("OC_N_transform"),
-        NodeItem("OC_N_crop"),
-    ]),
-    OpenCompNodeCategory("OC_CAT_UTILITY", "Utility", items=[
-        NodeItem("OC_N_reroute"),
-    ]),
-]
 
 
 def register():
@@ -263,8 +434,18 @@ def register():
     for mod in _node_modules:
         mod.register()
 
-    # Register node categories for the Add menu
-    nodeitems_utils.register_node_categories(_category_name, _node_categories)
+    # Register custom Add menu classes (Blender 5.0 compatible)
+    for cls in _add_menu_classes:
+        try:
+            bpy.utils.register_class(cls)
+        except RuntimeError:
+            pass
+
+    # Append our menu to NODE_MT_add
+    try:
+        bpy.types.NODE_MT_add.append(_draw_opencomp_add_menu)
+    except Exception:
+        pass
 
     # Register UI panels
     bpy.utils.register_class(OC_PT_active_node)
@@ -274,33 +455,39 @@ def register():
     from .node_canvas import operators as canvas_ops
     canvas_ops.register()
 
-    # Register Nuke-style UI (replaces all Blender panels)
-    from . import ui
-    ui.register()
-
-    # Override node editor context menu
-    _override_node_context_menu()
-
-    # Add menu item to Node Editor header (if available)
+    # Register NodeGraphQt integration (direct Python bridge)
     try:
-        bpy.types.NODE_HT_header.append(_draw_canvas_button)
-    except AttributeError:
-        pass  # Not available in this Blender version
+        from .nodegraph import qt_integration
+        qt_integration.register()
+    except ImportError as e:
+        print(f"[OpenComp] NodeGraphQt integration not available: {e}")
+
+    # DISABLED: Custom timeline UI (using native Blender timeline instead)
+    # from . import ui
+    # ui.register()
+    print("[OpenComp] Using native Blender timeline")
+
+    # Override node editor menus
+    _override_node_add_menu()
+    _override_node_context_menu()
 
 
 def unregister():
-    # Remove canvas button from header
-    try:
-        bpy.types.NODE_HT_header.remove(_draw_canvas_button)
-    except Exception:
-        pass
-
-    # Restore node editor context menu
+    # Restore node editor menus
+    _restore_node_add_menu()
     _restore_node_context_menu()
 
-    # Unregister Nuke-style UI
-    from . import ui
-    ui.unregister()
+    # DISABLED: Custom timeline UI
+    # from . import ui
+    # ui.unregister()
+    pass
+
+    # Unregister NodeGraphQt integration
+    try:
+        from .nodegraph import qt_integration
+        qt_integration.unregister()
+    except ImportError:
+        pass
 
     # Unregister native GPU node canvas
     from .node_canvas import operators as canvas_ops
@@ -313,11 +500,18 @@ def unregister():
         except RuntimeError:
             pass
 
-    # Unregister node categories
+    # Remove our menu from NODE_MT_add
     try:
-        nodeitems_utils.unregister_node_categories(_category_name)
+        bpy.types.NODE_MT_add.remove(_draw_opencomp_add_menu)
     except Exception:
         pass
+
+    # Unregister custom Add menu classes
+    for cls in reversed(_add_menu_classes):
+        try:
+            bpy.utils.unregister_class(cls)
+        except RuntimeError:
+            pass
 
     # Unregister all node classes (reverse order)
     for mod in reversed(_node_modules):

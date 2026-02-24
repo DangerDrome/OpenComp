@@ -214,26 +214,24 @@ def _draw_callback():
     if space.tree_type != 'OC_NT_compositor':
         return
 
-    # Skip drawing if a popup menu is active
-    if _is_popup_active():
-        return
-
-    # Get the actual node tree
-    tree = space.node_tree
-
     region = context.region
     state = get_canvas_state()
     renderer = get_renderer()
 
-    # Sync canvas state from the actual Blender node tree
-    # This ensures we always show the real nodes, not a separate copy
-    _links = sync_from_tree(state, tree)
+    # Get the actual node tree
+    tree = space.node_tree
+
+    # Only sync from tree when no popup is active (file browser, menus, etc.)
+    # When popup is active, we "freeze" the display using cached state
+    if not _is_popup_active():
+        _links = sync_from_tree(state, tree)
 
     # Get connection style from tree
     connection_style = 'BEZIER'
     if tree and hasattr(tree, 'connection_style'):
         connection_style = tree.connection_style
 
+    # Always draw everything - nodes stay visible during file browser
     renderer.draw(state, region.width, region.height, _links, connection_style)
 
 
@@ -537,6 +535,11 @@ class OC_OT_canvas_modal(Operator):
             for area in context.screen.areas:
                 if area.type == 'NODE_EDITOR':
                     area.tag_redraw()
+            return {'PASS_THROUGH'}
+
+        # CRITICAL: Pass through empty/unknown event types immediately
+        # These include internal drag-and-drop events (type 20515) that FileHandler needs
+        if event.type == '' or event.type == 'NONE':
             return {'PASS_THROUGH'}
 
         # Get absolute mouse position
@@ -1151,8 +1154,25 @@ class OC_OT_canvas_modal(Operator):
                 node_area.tag_redraw()
             return {'RUNNING_MODAL'}
 
+        # Ctrl+V - paste file path from clipboard and create Read node
+        if event.type == 'V' and event.value == 'PRESS' and event.ctrl and not event.shift:
+            import os
+            clipboard = context.window_manager.clipboard
+            # Check if clipboard contains a file path
+            if clipboard and os.path.exists(clipboard.strip()):
+                filepath = clipboard.strip()
+                # Check file extension
+                ext = os.path.splitext(filepath)[1].lower()
+                if ext in {'.exr', '.png', '.jpg', '.jpeg', '.tif', '.tiff', '.hdr', '.dpx', '.cin'}:
+                    cx, cy = state.screen_to_canvas(mx, my, region.width, region.height)
+                    # Call drop operator which handles sequence detection
+                    bpy.ops.oc.read_drop(filepath=filepath)
+                    node_area.tag_redraw()
+                    return {'RUNNING_MODAL'}
+            return {'PASS_THROUGH'}
+
         # R key - quick add Read node and open file browser
-        if event.type == 'B' and event.value == 'PRESS' and not event.shift and not event.ctrl:
+        if event.type == 'R' and event.value == 'PRESS' and not event.shift and not event.ctrl:
             cx, cy = state.screen_to_canvas(mx, my, region.width, region.height)
 
             # Create Read node at cursor
@@ -1161,10 +1181,11 @@ class OC_OT_canvas_modal(Operator):
                 new_node = tree.nodes.new('OC_N_read')
                 new_node.location = (cx, cy)
 
-                # Deselect all nodes
+                # Deselect all nodes and select new node
                 for n in tree.nodes:
                     n.select = False
-                tree.nodes.active = None
+                new_node.select = True
+                tree.nodes.active = new_node
 
                 # Sync to canvas state
                 sync_from_tree(state, tree)
@@ -1230,7 +1251,10 @@ class OC_OT_add_node(Operator):
 
     def execute(self, context):
         space = context.space_data
-        if not space or not space.node_tree:
+        # Must be in a NODE_EDITOR with an OC_NT_compositor tree
+        if not space or space.type != 'NODE_EDITOR':
+            return {'CANCELLED'}
+        if not hasattr(space, 'node_tree') or not space.node_tree:
             return {'CANCELLED'}
 
         tree = space.node_tree
@@ -1319,6 +1343,8 @@ class OC_MT_add_node(bpy.types.Menu):
         layout.label(text="Merge", icon='NODE_COMPOSITING')
         op = layout.operator("oc.add_node", text="Over")
         op.node_type = "OC_N_over"
+        op = layout.operator("oc.add_node", text="Merge")
+        op.node_type = "OC_N_merge"
         op = layout.operator("oc.add_node", text="Shuffle")
         op.node_type = "OC_N_shuffle"
 
@@ -1348,6 +1374,20 @@ class OC_MT_add_node(bpy.types.Menu):
         op.node_type = "OC_N_write"
         op = layout.operator("oc.add_node", text="Viewer")
         op.node_type = "OC_N_viewer"
+
+        layout.separator()
+
+        # Draw nodes
+        layout.label(text="Draw", icon='MESH_CIRCLE')
+        op = layout.operator("oc.add_node", text="Roto")
+        op.node_type = "OC_N_roto"
+
+        layout.separator()
+
+        # Utility nodes
+        layout.label(text="Utility", icon='ARROW_LEFTRIGHT')
+        op = layout.operator("oc.add_node", text="Reroute")
+        op.node_type = "OC_N_reroute"
 
 
 # ============================================================================
@@ -1399,32 +1439,6 @@ class OC_PT_toolbar(bpy.types.Panel):
         col.operator("oc.add_node", text="", icon='HIDE_OFF').node_type = "OC_N_viewer"
 
 
-# ============================================================================
-# File Menu (prepended to Node Editor header)
-# ============================================================================
-
-class OC_MT_file(bpy.types.Menu):
-    """File menu for OpenComp."""
-    bl_idname = "OC_MT_file"
-    bl_label = "File"
-
-    def draw(self, context):
-        layout = self.layout
-        layout.operator("wm.read_homefile", text="New", icon='FILE_BLANK')
-        layout.operator("wm.open_mainfile", text="Open...", icon='FILE_FOLDER')
-        layout.separator()
-        layout.operator("wm.save_mainfile", text="Save", icon='FILE_TICK')
-        layout.operator("wm.save_as_mainfile", text="Save As...", icon='FILE_NEW')
-        layout.separator()
-        layout.operator("wm.quit_blender", text="Quit", icon='QUIT')
-
-
-def _draw_header_file_menu(self, context):
-    """Prepend File menu to Node Editor header."""
-    if context.space_data.tree_type == 'OC_NT_compositor':
-        self.layout.menu("OC_MT_file", text="File")
-
-
 # Registration
 classes = [
     OC_OT_canvas_modal,
@@ -1433,7 +1447,6 @@ classes = [
     OC_OT_set_connection_style,
     OC_MT_add_node,
     OC_MT_connection_style,
-    OC_MT_file,
     OC_PT_toolbar,
 ]
 
@@ -1449,14 +1462,6 @@ def register():
     from . import toolbar
     toolbar.register()
 
-    # Add File menu to header (only if NODE_HT_header still exists)
-    try:
-        bpy.types.NODE_HT_header.prepend(_draw_header_file_menu)
-    except AttributeError:
-        # NODE_HT_header was unregistered by headers module - that's fine,
-        # we're using GPU-drawn headers now
-        pass
-
     # Auto-start the canvas modal after a short delay
     def _start_canvas():
         try:
@@ -1471,12 +1476,6 @@ def register():
 
 
 def unregister():
-    # Remove header extensions
-    try:
-        bpy.types.NODE_HT_header.remove(_draw_header_file_menu)
-    except:
-        pass
-
     # Unregister toolbar draw handler
     from . import toolbar
     toolbar.unregister()
