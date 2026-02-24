@@ -24,6 +24,7 @@ _OC_VERSION = "v0.4.0"
 
 _original_topbar_draw = None
 _original_view3d_header_draw = None
+_original_properties_header_draw = None
 _original_splash_draw = None
 _original_splash_about_draw = None
 _original_splash_quick_setup_draw = None
@@ -291,7 +292,7 @@ def _draw_temp_link():
     gpu.state.line_width_set(2.0)
 
     shader.bind()
-    shader.uniform_float("color", (0.3, 0.85, 0.5, 0.9))  # Green link color
+    shader.uniform_float("color", (0.2, 0.55, 0.35, 0.9))  # Green link color
     shader.uniform_float("lineWidth", 2.0)
     shader.uniform_float("viewportSize", gpu.state.viewport_get()[2:])
 
@@ -837,6 +838,36 @@ def _restore_node_header():
             pass
 
 
+# ── PROPERTIES Header Override ──────────────────────────────────────────
+
+def _opencomp_properties_header_draw(self, context):
+    """Replace Properties header with 'Node Properties' text."""
+    layout = self.layout
+    layout.label(text="Node Properties")
+
+
+def _override_properties_header():
+    """Replace PROPERTIES_HT_header draw with OpenComp version."""
+    global _original_properties_header_draw
+    try:
+        header_cls = bpy.types.PROPERTIES_HT_header
+        _original_properties_header_draw = header_cls.draw
+        header_cls.draw = _opencomp_properties_header_draw
+    except Exception as e:
+        print(f"[OpenComp] Properties header override skipped: {e}")
+
+
+def _restore_properties_header():
+    """Restore original PROPERTIES_HT_header draw function."""
+    global _original_properties_header_draw
+    if _original_properties_header_draw is not None:
+        try:
+            bpy.types.PROPERTIES_HT_header.draw = _original_properties_header_draw
+            _original_properties_header_draw = None
+        except Exception:
+            pass
+
+
 # ── VIEW3D Header Override ──────────────────────────────────────────────
 
 def _operator_exists(idname):
@@ -898,7 +929,7 @@ def _opencomp_view3d_header_draw(self, context):
 
     # Colorspace dropdown
     row = layout.row(align=True)
-    row.label(text="CS:")
+    row.label(text="Color Space:")
     row.prop(settings, "colorspace", text="")
 
     layout.separator(type='LINE')
@@ -927,6 +958,13 @@ def _opencomp_view3d_header_draw(self, context):
         row.operator("oc.viewer_fit", text="", icon='FULLSCREEN_ENTER')
     if _operator_exists("oc.viewer_reset"):
         row.operator("oc.viewer_reset", text="", icon='HOME')
+
+    # Clear Cache button (right-aligned)
+    row.separator(factor=2.0)
+    try:
+        row.operator("oc.clear_cache", text="Clear Cache", icon='TRASH')
+    except Exception:
+        pass
 
 
 def _override_view3d_header():
@@ -976,7 +1014,7 @@ def _opencomp_time_header_draw(self, context):
     # Use scale_x to make buttons wider (scale_y causes truncation in headers)
     # We'll make individual elements larger instead
 
-    # FPS dropdown (far left)
+    # FPS dropdown (far left) + Playback mode next to it
     row = layout.row(align=True)
     row.scale_x = 1.3
     row.prop(scene, "oc_fps_preset", text="")
@@ -985,13 +1023,10 @@ def _opencomp_time_header_draw(self, context):
         sub = row.row(align=True)
         sub.scale_x = 0.6
         sub.prop(scene.render, "fps", text="")
+    # Playback mode (loop/pingpong/etc) right next to FPS
+    row.prop(scene, "oc_playback_mode", text="")
 
     layout.separator_spacer()
-
-    # Playback mode (loop/pingpong/etc) before start frame
-    row = layout.row(align=True)
-    row.scale_x = 1.3
-    row.prop(scene, "oc_playback_mode", text="")
 
     # Start frame (left of playback controls)
     row = layout.row(align=True)
@@ -1247,12 +1282,10 @@ _hidden_scene_panels = []
 
 
 def _hide_builtin_scene_panels():
-    """Unregister all built-in 'scene' context panels from the Properties area.
-
-    This leaves only our OC_PT_* panels visible. Panels are restored on
-    unregister so regular Blender isn't affected.
-    """
+    """Unregister built-in scene panels to show only OC panels."""
     global _hidden_scene_panels
+
+    # Hide all panels in 'scene' context (except ours)
     for name in dir(bpy.types):
         if name.startswith('OC_'):
             continue
@@ -1264,17 +1297,20 @@ def _hide_builtin_scene_panels():
             try:
                 bpy.utils.unregister_class(cls)
                 _hidden_scene_panels.append(cls)
-            except Exception:
+            except RuntimeError:
                 pass
+
+    if _hidden_scene_panels:
+        print(f"[OpenComp] Hidden {len(_hidden_scene_panels)} built-in scene panels")
 
 
 def _restore_builtin_scene_panels():
-    """Re-register built-in scene panels that were hidden."""
+    """Re-register hidden scene panels."""
     global _hidden_scene_panels
     for cls in _hidden_scene_panels:
         try:
             bpy.utils.register_class(cls)
-        except Exception:
+        except RuntimeError:
             pass
     _hidden_scene_panels = []
 
@@ -1301,7 +1337,7 @@ def _configure_area_chrome():
                     if space.type == 'NODE_EDITOR':
                         space.show_region_toolbar = False
                         space.show_region_ui = False
-                        space.show_region_header = True
+                        space.show_region_header = False
             elif area.type == 'VIEW_3D':
                 for space in area.spaces:
                     if space.type == 'VIEW_3D':
@@ -1319,20 +1355,6 @@ def _configure_area_chrome():
                     if space.type == 'PROPERTIES':
                         space.context = 'SCENE'
                         space.show_region_header = False
-                # Hide the navigation bar (left icon column)
-                for region in area.regions:
-                    if region.type == 'NAVIGATION_BAR' and region.width > 1:
-                        try:
-                            window = bpy.context.window
-                            with bpy.context.temp_override(
-                                window=window, area=area, region=region
-                            ):
-                                bpy.ops.screen.region_toggle(
-                                    region_type='NAVIGATION_BAR'
-                                )
-                        except Exception:
-                            pass
-                        break
         screen.show_statusbar = False
 
 
@@ -1354,16 +1376,12 @@ def _configure_node_editor_area(area):
         if space.type == 'NODE_EDITOR':
             space.show_region_toolbar = False
             space.show_region_ui = False
+            space.show_region_header = False
             space.tree_type = "OC_NT_compositor"
 
 
 def _configure_properties_area(area, window=None):
-    """Configure PROPERTIES area as a clean node-properties panel.
-
-    Hides the header and navigation bar so only our OC_PT_active_node
-    panels are visible in the WINDOW region — like Nuke's properties bin.
-    Built-in scene panels are unregistered by _hide_builtin_scene_panels().
-    """
+    """Configure PROPERTIES area - use SCENE context with built-in panels hidden."""
     for space in area.spaces:
         if space.type == 'PROPERTIES':
             space.context = 'SCENE'
@@ -1521,7 +1539,6 @@ def _zoom_timeline_to_frame_range(area=None, window=None, screen=None):
                 break
     except Exception as e:
         print(f"[OpenComp] Timeline zoom failed: {e}")
-
 
 
 def _create_node_editor_toolbar(window, screen, node_editor):
@@ -1708,7 +1725,8 @@ def _try_split_timeline(window, screen):
 
     try:
         with bpy.context.temp_override(window=window, area=view_area, screen=screen):
-            result = bpy.ops.screen.area_split(direction='HORIZONTAL', factor=0.08)
+            # Factor 0.12 gives a taller timeline with more visible frame ruler
+            result = bpy.ops.screen.area_split(direction='HORIZONTAL', factor=0.12)
             if result != {'FINISHED'}:
                 print("[OpenComp] area_split did not finish — skipping timeline")
                 return
@@ -1734,12 +1752,7 @@ _deferred_setup_done = False
 
 
 def _try_join_properties(window, screen):
-    """Attempt to merge two PROPERTIES areas into one tall right panel.
-
-    If the join fails (area_join is unreliable from scripts), convert the
-    smaller area to OUTLINER in BLEND_FILE mode — useful for seeing images,
-    node groups, and scene data at a glance.
-    """
+    """Attempt to merge two PROPERTIES areas into one tall panel."""
     props_areas = [a for a in screen.areas if a.type == 'PROPERTIES']
     if len(props_areas) < 2:
         return
@@ -1749,28 +1762,17 @@ def _try_join_properties(window, screen):
     bot_area = props_areas[0]
     top_area = props_areas[1]
 
-    # Blender 5.0 uses source_xy (area to keep) / target_xy (area to absorb)
+    # Try to join
     sx, sy = bot_area.x + bot_area.width // 2, bot_area.y + bot_area.height // 2
     tx, ty = top_area.x + top_area.width // 2, top_area.y + top_area.height // 2
 
-    joined = False
     try:
         with bpy.context.temp_override(window=window, screen=screen):
             result = bpy.ops.screen.area_join(source_xy=(sx, sy), target_xy=(tx, ty))
             if result == {'FINISHED'}:
-                joined = True
                 print("[OpenComp] Joined PROPERTIES areas into one panel")
     except Exception:
         pass
-
-    if not joined:
-        # Fallback: convert the smaller (top) area to OUTLINER
-        top_area.type = 'OUTLINER'
-        for space in top_area.spaces:
-            if space.type == 'OUTLINER':
-                space.display_mode = 'LIBRARIES'
-                space.show_region_header = False
-        print("[OpenComp] Using Outliner + Properties dual panel layout")
 
 
 def _deferred_ui_setup():
@@ -1855,9 +1857,6 @@ def _configure_ui_on_load(dummy):
     scene.render.fps = 24
     scene.render.fps_base = 1.0
 
-    # Hide built-in scene panels so only OC panels show in Properties area
-    _hide_builtin_scene_panels()
-
     # Hide chrome on all compositor areas (NODE_EDITOR, VIEW_3D)
     _configure_area_chrome()
 
@@ -1893,34 +1892,43 @@ def _apply_dark_theme():
     # CRITICAL: Restore icon/text visibility (startup.blend sets this to 0.0)
     ui.icon_alpha = 1.0
 
+    # OpenComp accent color (muted green - matches playhead)
+    OC_ACCENT = (0.2, 0.55, 0.35, 1.0)
+    OC_ACCENT_DIM = (0.15, 0.4, 0.25, 1.0)
+
     # General UI widget colors - wrap in try/except for safety
     try:
         ui.wcol_regular.inner = (0.22, 0.22, 0.22, 1.0)
-        ui.wcol_regular.inner_sel = (0.35, 0.35, 0.35, 1.0)
+        ui.wcol_regular.inner_sel = OC_ACCENT_DIM
         ui.wcol_regular.outline = (0.15, 0.15, 0.15, 1.0)
         ui.wcol_regular.text = (0.85, 0.85, 0.85)  # RGB only
         ui.wcol_regular.text_sel = (1.0, 1.0, 1.0)  # RGB only
 
         ui.wcol_tool.inner = (0.25, 0.25, 0.25, 1.0)
-        ui.wcol_tool.inner_sel = (0.4, 0.4, 0.4, 1.0)
+        ui.wcol_tool.inner_sel = OC_ACCENT_DIM
         ui.wcol_tool.text = (0.85, 0.85, 0.85)
 
         ui.wcol_text.inner = (0.18, 0.18, 0.18, 1.0)
-        ui.wcol_text.inner_sel = (0.3, 0.3, 0.3, 1.0)
+        ui.wcol_text.inner_sel = OC_ACCENT_DIM
         ui.wcol_text.text = (0.9, 0.9, 0.9)
 
-        ui.wcol_num.inner = (0.2, 0.2, 0.2, 1.0)
+        ui.wcol_num.inner = (0.14, 0.14, 0.14, 1.0)  # Match timeline numbers background
+        ui.wcol_num.inner_sel = OC_ACCENT_DIM
         ui.wcol_num.text = (0.85, 0.85, 0.85)
+
+        ui.wcol_numslider.inner = (0.14, 0.14, 0.14, 1.0)  # Match timeline numbers background
+        ui.wcol_numslider.inner_sel = OC_ACCENT_DIM
+        ui.wcol_numslider.item = OC_ACCENT  # Slider handle
 
         # Menu widget colors (for topbar menus)
         ui.wcol_menu.inner = (0.22, 0.22, 0.22, 1.0)
-        ui.wcol_menu.inner_sel = (0.35, 0.35, 0.35, 1.0)
+        ui.wcol_menu.inner_sel = OC_ACCENT_DIM
         ui.wcol_menu.text = (0.9, 0.9, 0.9)  # Light text
         ui.wcol_menu.text_sel = (1.0, 1.0, 1.0)
 
         # Menu item colors (dropdown items)
         ui.wcol_menu_item.inner = (0.20, 0.20, 0.20, 1.0)
-        ui.wcol_menu_item.inner_sel = (0.3, 0.5, 0.3, 1.0)  # Green highlight
+        ui.wcol_menu_item.inner_sel = OC_ACCENT_DIM
         ui.wcol_menu_item.text = (0.9, 0.9, 0.9)
         ui.wcol_menu_item.text_sel = (1.0, 1.0, 1.0)
 
@@ -1928,20 +1936,26 @@ def _apply_dark_theme():
         ui.wcol_menu_back.inner = (0.18, 0.18, 0.18, 1.0)
         ui.wcol_menu_back.outline = (0.1, 0.1, 0.1, 1.0)
 
-        # Pulldown menus (topbar menu buttons) - BRIGHT TEXT
+        # Pulldown menus (topbar menu buttons)
         ui.wcol_pulldown.inner = (0.2, 0.2, 0.2, 1.0)
-        ui.wcol_pulldown.inner_sel = (0.3, 0.3, 0.3, 1.0)
+        ui.wcol_pulldown.inner_sel = OC_ACCENT_DIM
         ui.wcol_pulldown.outline = (0.15, 0.15, 0.15, 1.0)
         ui.wcol_pulldown.text = (1.0, 1.0, 1.0)  # Pure white
-        ui.wcol_pulldown.text_sel = (1.0, 1.0, 0.0)  # Yellow when selected
+        ui.wcol_pulldown.text_sel = (1.0, 1.0, 1.0)
 
-        # Also set the "option" widget which might be used
+        # Option widget (checkboxes, etc.)
         ui.wcol_option.inner = (0.2, 0.2, 0.2, 1.0)
+        ui.wcol_option.inner_sel = OC_ACCENT
         ui.wcol_option.text = (1.0, 1.0, 1.0)
 
-        # Radio buttons (sometimes used in headers)
+        # Radio buttons
         ui.wcol_radio.inner = (0.2, 0.2, 0.2, 1.0)
+        ui.wcol_radio.inner_sel = OC_ACCENT
         ui.wcol_radio.text = (1.0, 1.0, 1.0)
+
+        # Progress bar
+        ui.wcol_progress.inner_sel = OC_ACCENT
+        ui.wcol_progress.item = OC_ACCENT
 
     except Exception as e:
         print(f"[OpenComp] Widget theme error: {e}")
@@ -1961,11 +1975,13 @@ def _apply_dark_theme():
     except Exception as e:
         print(f"[OpenComp] Topbar theme error: {e}")
 
-    # Node editor - dark background
+    # Node editor - dark background with OpenComp accent
     try:
         theme.node_editor.space.back = (0.16, 0.16, 0.16)
         theme.node_editor.wire = (0.5, 0.5, 0.5, 1.0)
-        theme.node_editor.wire_select = (1.0, 1.0, 1.0, 1.0)
+        theme.node_editor.wire_select = OC_ACCENT
+        theme.node_editor.node_selected = OC_ACCENT
+        theme.node_editor.node_active = OC_ACCENT
     except Exception:
         pass
 
@@ -1995,6 +2011,40 @@ def _apply_dark_theme():
     # Widget emboss (subtle 3D effect on buttons)
     try:
         ui.emboss = (0.0, 0.0, 0.0, 0.3)
+    except Exception:
+        pass
+
+    # Gizmo colors - use OpenComp accent for highlight
+    try:
+        ui.gizmo_hi = (0.2, 0.55, 0.35)  # OpenComp accent for gizmo highlight
+        ui.gizmo_a = (0.2, 0.55, 0.35)   # OpenComp accent
+    except Exception:
+        pass
+
+    # Animation state colors - use OpenComp accent
+    try:
+        ui.wcol_state.inner_anim = (0.15, 0.4, 0.25)     # OpenComp dim
+        ui.wcol_state.inner_anim_sel = (0.2, 0.55, 0.35) # OpenComp accent
+    except Exception:
+        pass
+
+    # Widget text cursor - OpenComp accent
+    try:
+        ui.widget_text_cursor = (0.2, 0.55, 0.35)  # OpenComp accent
+    except Exception:
+        pass
+
+
+    # Timeline playhead - THE ACTUAL SCRUBBER COLOR
+    try:
+        theme.common.anim.playhead = (0.2, 0.55, 0.35)  # Dimmer OpenComp green
+    except Exception:
+        pass
+
+
+    # Active panel color
+    try:
+        ui.panel_active = (0.2, 0.5, 0.35, 1.0)  # OpenComp accent dim
     except Exception:
         pass
 
@@ -2561,11 +2611,13 @@ def register():
 
     _override_topbar()
     _override_node_header()
+    _override_properties_header()
     _override_view3d_header()
     _override_time_header()
     _override_splash()
     _override_splash_about()
     _override_quick_setup()
+    _hide_builtin_scene_panels()
     _apply_dark_theme()
     _clear_default_node_keymaps()
     _setup_keymaps()
@@ -2608,6 +2660,7 @@ def unregister():
     _teardown_keymaps()
     _restore_topbar()
     _restore_node_header()
+    _restore_properties_header()
     _restore_view3d_header()
     _restore_time_header()
     _restore_splash()

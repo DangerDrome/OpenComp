@@ -41,14 +41,14 @@ class NodeCanvasRenderer:
     COLOR_GRID_MAJOR = (0.25, 0.25, 0.25, 0.8)
     COLOR_NODE_BG = (0.3, 0.3, 0.3, 1.0)
     COLOR_NODE_HEADER = (0.2, 0.4, 0.3, 1.0)
-    COLOR_NODE_SELECTED = (0.3, 0.8, 0.45, 1.0)
+    COLOR_NODE_SELECTED = (0.2, 0.55, 0.35, 1.0)
     COLOR_NODE_BORDER = (0.1, 0.1, 0.1, 1.0)
     COLOR_PORT_INPUT = (0.3, 0.6, 0.3, 1.0)
     COLOR_PORT_OUTPUT = (0.6, 0.3, 0.3, 1.0)
     COLOR_LINK = (0.8, 0.8, 0.8, 1.0)
-    COLOR_LINK_DRAG = (0.3, 0.85, 0.5, 1.0)
-    COLOR_BOX_SELECT = (0.3, 0.5, 0.8, 0.3)
-    COLOR_BOX_SELECT_BORDER = (0.4, 0.6, 0.9, 1.0)
+    COLOR_LINK_DRAG = (0.2, 0.55, 0.35, 1.0)
+    COLOR_BOX_SELECT = (0.2, 0.55, 0.35, 0.3)  # OpenComp accent
+    COLOR_BOX_SELECT_BORDER = (0.2, 0.55, 0.35, 1.0)  # OpenComp accent
     COLOR_TEXT = (0.9, 0.9, 0.9, 1.0)
 
     # Dimensions

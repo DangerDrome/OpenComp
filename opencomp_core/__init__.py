@@ -207,18 +207,18 @@ def _find_active_oc_node():
 
 
 class OC_PT_active_node(bpy.types.Panel):
-    """Node header — name and label (mirrors Node Editor sidebar)."""
+    """Node properties panel - custom tab in Properties editor."""
 
     bl_idname = "OC_PT_active_node"
     bl_label = "Active Node"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
-    bl_context = 'scene'
+    bl_context = 'scene'  # Custom context = new tab
     bl_order = 0
 
     @classmethod
     def poll(cls, context):
-        return _find_active_oc_node() is not None
+        return True  # Always show
 
     def draw(self, context):
         layout = self.layout
@@ -234,7 +234,7 @@ class OC_PT_active_node(bpy.types.Panel):
 
 
 class OC_PT_active_node_properties(bpy.types.Panel):
-    """Node controls — the properties exposed by draw_buttons()."""
+    """Node controls - properties exposed by draw_buttons()."""
 
     bl_idname = "OC_PT_active_node_properties"
     bl_label = "Properties"
@@ -473,6 +473,10 @@ def register():
 
 
 def unregister():
+    # Clear GPU shader cache first
+    from .gpu_pipeline import executor
+    executor.clear_cache()
+
     # Restore node editor menus
     _restore_node_add_menu()
     _restore_node_context_menu()

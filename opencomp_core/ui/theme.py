@@ -10,8 +10,8 @@ import bpy
 NUKE_BG_DARK = (0.16, 0.16, 0.16)       # Main background
 NUKE_BG_MID = (0.22, 0.22, 0.22)        # Panel background
 NUKE_BG_LIGHT = (0.28, 0.28, 0.28)      # Button background
-NUKE_ACCENT = (0.2, 0.7, 0.4)           # Green accent (OpenComp's signature)
-NUKE_ACCENT_LIGHT = (0.3, 0.85, 0.5)    # Bright green for selection
+NUKE_ACCENT = (0.2, 0.55, 0.35)         # Green accent (OpenComp's signature)
+NUKE_ACCENT_LIGHT = (0.2, 0.55, 0.35)   # Muted green for selection
 NUKE_TEXT = (0.85, 0.85, 0.85)          # Main text
 NUKE_TEXT_DIM = (0.5, 0.5, 0.5)         # Dimmed text
 NUKE_BORDER = (0.1, 0.1, 0.1)           # Border color

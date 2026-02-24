@@ -699,10 +699,10 @@ def _draw_hud(tex):
 
         # Font settings
         font_id = 0
-        line_height = 16
+        line_height = 20
 
         # ── Line 1: File info (bottom) ──
-        blf.size(font_id, 11)
+        blf.size(font_id, 14)
         blf.color(font_id, 0.7, 0.7, 0.7, 0.75)
 
         parts1 = [source_file]
@@ -718,12 +718,16 @@ def _draw_hud(tex):
         blf.position(font_id, 12, 12, 0)
         blf.draw(font_id, line1)
 
-        # Now draw resolution separately (with PROXY in green if needed)
-        line1_w = blf.dimensions(font_id, line1 + "  |  ")[0]
+        # Draw separator before resolution
+        sep = "  |  "
+        line1_w = blf.dimensions(font_id, line1)[0]
+        blf.position(font_id, 12 + line1_w, 12, 0)
+        blf.draw(font_id, sep)
+        line1_w += blf.dimensions(font_id, sep)[0]
 
         if proxy_factor > 1 and original_width and original_height:
             # Draw PROXY in green
-            blf.color(font_id, 0.4, 0.9, 0.4, 0.9)  # Bright green
+            blf.color(font_id, 0.2, 0.55, 0.35, 0.9)  # OpenComp accent
             blf.position(font_id, 12 + line1_w, 12, 0)
             proxy_text = f"PROXY 1/{proxy_factor} "
             blf.draw(font_id, proxy_text)
@@ -751,17 +755,23 @@ def _draw_hud(tex):
             res_w = blf.dimensions(font_id, res_str)[0]
             total_line1_w = line1_w + res_w
 
-        # Channel info
+        # Channel info (with separator)
         if channel_names and len(channel_names) > 0:
             ch_str = ",".join(channel_names[:6])  # Max 6 channels shown
             if len(channel_names) > 6:
                 ch_str += f"...+{len(channel_names)-6}"
             blf.color(font_id, 0.7, 0.7, 0.7, 0.75)
-            blf.position(font_id, 12 + total_line1_w + blf.dimensions(font_id, "  |  ")[0], 12, 0)
+            # Draw separator
+            blf.position(font_id, 12 + total_line1_w, 12, 0)
+            blf.draw(font_id, sep)
+            blf.position(font_id, 12 + total_line1_w + blf.dimensions(font_id, sep)[0], 12, 0)
             blf.draw(font_id, ch_str)
         elif channels:
             blf.color(font_id, 0.7, 0.7, 0.7, 0.75)
-            blf.position(font_id, 12 + total_line1_w + blf.dimensions(font_id, "  |  ")[0], 12, 0)
+            # Draw separator
+            blf.position(font_id, 12 + total_line1_w, 12, 0)
+            blf.draw(font_id, sep)
+            blf.position(font_id, 12 + total_line1_w + blf.dimensions(font_id, sep)[0], 12, 0)
             blf.draw(font_id, f"{channels}ch")
 
         # ── Line 2: Software/view info (above line 1) ──
@@ -781,7 +791,7 @@ def _draw_hud(tex):
         line2 = "  |  ".join(parts2) if parts2 else ""
 
         if line2:
-            blf.color(font_id, 0.6, 0.7, 0.8, 0.75)  # Slightly blue tint
+            blf.color(font_id, 0.2, 0.55, 0.35, 0.85)  # OpenComp accent
             blf.position(font_id, 12, 12 + line_height, 0)
             blf.draw(font_id, line2)
 
@@ -793,25 +803,31 @@ def _draw_hud(tex):
         right_text = f"{colorspace}   |   {cache_str}   |   Frame {frame}   {zoom_pct}%"
         text_w = blf.dimensions(font_id, right_text)[0]
 
-        # Draw Colorspace in cyan
-        blf.color(font_id, 0.4, 0.8, 0.9, 0.85)  # Cyan for colorspace
+        # Draw Colorspace in normal text color
+        blf.color(font_id, 0.7, 0.7, 0.7, 0.75)
         blf.position(font_id, area.width - text_w - 12, 12, 0)
         blf.draw(font_id, colorspace)
-        cs_w = blf.dimensions(font_id, colorspace + "   |   ")[0]
+        cs_w = blf.dimensions(font_id, colorspace)[0]
 
-        # Draw cache part in green/gray
+        # Draw separator after colorspace
+        right_sep = "   |   "
+        blf.position(font_id, area.width - text_w - 12 + cs_w, 12, 0)
+        blf.draw(font_id, right_sep)
+        sep_w = blf.dimensions(font_id, right_sep)[0]
+
+        # Draw cache part in accent color/gray
         if cache_info['frame_count'] > 0:
-            blf.color(font_id, 0.4, 0.9, 0.4, 0.85)  # Green when cached
+            blf.color(font_id, 0.2, 0.55, 0.35, 0.85)  # OpenComp accent when cached
         else:
             blf.color(font_id, 0.5, 0.5, 0.5, 0.75)  # Gray when empty
-        blf.position(font_id, area.width - text_w - 12 + cs_w, 12, 0)
+        blf.position(font_id, area.width - text_w - 12 + cs_w + sep_w, 12, 0)
         blf.draw(font_id, cache_str)
         cache_w = blf.dimensions(font_id, cache_str)[0]
 
         # Draw separator and frame/zoom in normal color
         blf.color(font_id, 0.7, 0.7, 0.7, 0.75)
         rest_text = f"   |   Frame {frame}   {zoom_pct}%"
-        blf.position(font_id, area.width - text_w - 12 + cs_w + cache_w, 12, 0)
+        blf.position(font_id, area.width - text_w - 12 + cs_w + sep_w + cache_w, 12, 0)
         blf.draw(font_id, rest_text)
 
     except Exception:
@@ -1059,8 +1075,9 @@ def _draw_timeline_cache_bar():
     gpu.state.blend_set('ALPHA')
 
     # Draw cached frame indicators at top of timeline
-    bar_height = 4
-    bar_y = region.height - 8  # Near top of timeline
+    # Thin bar with transparency so frame numbers remain visible
+    bar_height = 3
+    bar_y = region.height - 4  # Near top of timeline
 
     for cached_frame in cached_frames:
         if view_left <= cached_frame <= view_right:
@@ -1078,10 +1095,29 @@ def _draw_timeline_cache_bar():
             indices = [(0, 1, 2), (0, 2, 3)]
             batch = batch_for_shader(shader, 'TRIS', {"pos": verts}, indices=indices)
             shader.bind()
-            shader.uniform_float("color", (0.2, 0.85, 0.2, 0.9))  # Bright green
+            # OpenComp accent color (semi-transparent)
+            shader.uniform_float("color", (0.2, 0.55, 0.35, 0.85))
             batch.draw(shader)
 
     gpu.state.blend_set('NONE')
+
+
+# ── Clear Cache Operator ────────────────────────────────────────────────
+
+class OC_OT_clear_cache(bpy.types.Operator):
+    """Clear all cached frames"""
+    bl_idname = "oc.clear_cache"
+    bl_label = "Clear Cache"
+    bl_description = "Clear all cached frames from memory"
+
+    def execute(self, context):
+        clear_frame_cache()
+        # Redraw viewports and timeline
+        for area in context.screen.areas:
+            if area.type in ('VIEW_3D', 'DOPESHEET_EDITOR'):
+                area.tag_redraw()
+        self.report({'INFO'}, "Cache cleared")
+        return {'FINISHED'}
 
 
 # ── Registration ────────────────────────────────────────────────────────
@@ -1094,6 +1130,7 @@ def register():
         type=OpenCompViewerSettings
     )
     bpy.utils.register_class(ViewerNode)
+    bpy.utils.register_class(OC_OT_clear_cache)
 
     # Register draw handler only when not in background mode
     if not bpy.app.background:
@@ -1117,11 +1154,20 @@ def unregister():
         )
         _viewer_state["handler"] = None
 
+    # Clear viewer shader cache to force recompilation on next register
+    _viewer_state["shader"] = None
+    _viewer_state["batch"] = None
+
     if _timeline_handler is not None:
         bpy.types.SpaceDopeSheetEditor.draw_handler_remove(
             _timeline_handler, 'WINDOW'
         )
         _timeline_handler = None
+
+    try:
+        bpy.utils.unregister_class(OC_OT_clear_cache)
+    except RuntimeError:
+        pass
 
     try:
         bpy.utils.unregister_class(ViewerNode)

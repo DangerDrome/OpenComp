@@ -258,7 +258,7 @@ def _draw_timeline_strip(region_width, timeline_height):
         shader.uniform_float("color", (0.35, 0.35, 0.40, 1.0))
         batch.draw(shader)
 
-    # In point marker (blue bracket) - extends beyond bar
+    # In point marker (green bracket) - extends beyond bar
     in_x = timeline_left + (in_point - frame_start) / (frame_end - frame_start) * timeline_width
     gpu.state.line_width_set(2.0)
     in_bracket = [
@@ -266,7 +266,7 @@ def _draw_timeline_strip(region_width, timeline_height):
     ]
     batch = batch_for_shader(shader, 'LINES', {"pos": in_bracket})
     shader.bind()
-    shader.uniform_float("color", (0.3, 0.7, 1.0, 1.0))
+    shader.uniform_float("color", (0.2, 0.55, 0.35, 1.0))
     batch.draw(shader)
     _timeline_buttons["in_point"] = (in_x - 5, bar_bottom - 6, 10, bar_height + 16)
 
@@ -306,14 +306,11 @@ def _draw_timeline_strip(region_width, timeline_height):
     try:
         from ..nodes.viewer.viewer import get_cached_frames
         cached_frames = get_cached_frames()
-        print(f"[OpenComp DEBUG] Cache bar: {len(cached_frames)} frames cached, frame_range={frame_start}-{frame_end}")
         if cached_frames:
             cache_bar_height = 5  # Taller for visibility
             cache_bar_y = bar_bottom - 8  # Just below the scrub bar
-            print(f"[OpenComp DEBUG] Drawing cache bar at y={cache_bar_y}, bar_bottom={bar_bottom}")
 
             # Draw cached frame indicators
-            drawn_count = 0
             for cached_frame in cached_frames:
                 if frame_start <= cached_frame <= frame_end:
                     # Calculate position for this frame
@@ -328,10 +325,8 @@ def _draw_timeline_strip(region_width, timeline_height):
                     ]
                     batch = batch_for_shader(shader, 'TRIS', {"pos": cache_verts}, indices=indices)
                     shader.bind()
-                    shader.uniform_float("color", (0.2, 0.9, 0.2, 1.0))  # Bright green for cached
+                    shader.uniform_float("color", (0.2, 0.55, 0.35, 1.0))  # OpenComp accent
                     batch.draw(shader)
-                    drawn_count += 1
-            print(f"[OpenComp DEBUG] Drew {drawn_count} cache indicators")
     except Exception as e:
         print(f"[OpenComp] Cache bar error: {e}")
 
@@ -388,7 +383,7 @@ def _draw_timeline_strip(region_width, timeline_height):
     # Play/Pause
     is_playing = bpy.context.screen.is_animation_playing if hasattr(bpy.context.screen, 'is_animation_playing') else False
     play_icon = "||" if is_playing else ">"
-    play_color = (0.2, 0.9, 0.4, 1.0) if is_playing else (0.7, 0.7, 0.7, 1.0)
+    play_color = (0.2, 0.55, 0.35, 1.0) if is_playing else (0.7, 0.7, 0.7, 1.0)
     _draw_timeline_button(shader, btn_x, btn_row_y, btn_size, btn_size, play_icon, play_color)
     _timeline_buttons["play_pause"] = (btn_x, btn_row_y, btn_size, btn_size)
     btn_x += btn_size + btn_spacing
@@ -404,7 +399,7 @@ def _draw_timeline_strip(region_width, timeline_height):
     btn_x += btn_size + btn_spacing + 10
 
     # Set In point [
-    _draw_timeline_button(shader, btn_x, btn_row_y, btn_size, btn_size, "[", (0.3, 0.6, 0.9, 1.0))
+    _draw_timeline_button(shader, btn_x, btn_row_y, btn_size, btn_size, "[", (0.2, 0.55, 0.35, 1.0))
     _timeline_buttons["set_in"] = (btn_x, btn_row_y, btn_size, btn_size)
     btn_x += btn_size + btn_spacing
 
@@ -414,7 +409,7 @@ def _draw_timeline_strip(region_width, timeline_height):
     btn_x += btn_size + btn_spacing + 10
 
     # Loop toggle
-    loop_color = (0.2, 0.9, 0.4, 1.0) if use_preview else (0.5, 0.5, 0.5, 1.0)
+    loop_color = (0.2, 0.55, 0.35, 1.0) if use_preview else (0.5, 0.5, 0.5, 1.0)
     _draw_timeline_button(shader, btn_x, btn_row_y, btn_size, btn_size, "L", loop_color)
     _timeline_buttons["loop"] = (btn_x, btn_row_y, btn_size, btn_size)
 
@@ -422,17 +417,15 @@ def _draw_timeline_strip(region_width, timeline_height):
     try:
         from ..nodes.viewer.viewer import get_cache_memory_info
         cache_info = get_cache_memory_info()
-        print(f"[OpenComp DEBUG] Cache info: {cache_info}")
         blf.size(0, 11)
         # Color based on cache usage - bright green when has cache, dim gray when empty
         if cache_info['frame_count'] > 0:
-            blf.color(0, 0.4, 1.0, 0.4, 1.0)  # Bright green for cached frames
+            blf.color(0, 0.2, 0.55, 0.35, 1.0)  # OpenComp accent
         else:
             blf.color(0, 0.4, 0.4, 0.4, 1.0)  # Gray when empty
         cache_text = f"Cache: {cache_info['used_gb']:.1f}/{cache_info['limit_gb']:.0f}GB ({cache_info['frame_count']}f)"
         # Position in center of timeline
         cache_x = region_width // 2 - 60
-        print(f"[OpenComp DEBUG] Drawing cache text '{cache_text}' at x={cache_x}, y={btn_row_y + 5}")
         blf.position(0, cache_x, btn_row_y + 5, 0)
         blf.draw(0, cache_text)
     except Exception as e:
@@ -729,6 +722,11 @@ class OC_HT_viewer_header(Header):
 
         layout.separator_spacer()
 
+        # Clear Cache button (right side)
+        layout.operator("oc.clear_cache", text="Clear Cache", icon='TRASH')
+
+        layout.separator()
+
         # Frame info
         layout.label(text=f"Frame {context.scene.frame_current}")
 
@@ -752,6 +750,23 @@ class OC_OT_viewer_bg(Operator):
                         color = get_viewer_bg_color()
                         space.shading.background_color = color[:3]
                     area.tag_redraw()
+        return {'FINISHED'}
+
+
+class OC_OT_clear_cache(Operator):
+    """Clear all cached frames"""
+    bl_idname = "oc.clear_cache"
+    bl_label = "Clear Cache"
+    bl_description = "Clear all cached frames from memory"
+
+    def execute(self, context):
+        from ..nodes.viewer.viewer import clear_frame_cache
+        clear_frame_cache()
+        # Redraw viewports
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                area.tag_redraw()
+        self.report({'INFO'}, "Cache cleared")
         return {'FINISHED'}
 
 
@@ -823,6 +838,7 @@ classes = [
     OC_MT_viewer_bg,  # Menu must be registered before header that uses it
     OC_HT_viewer_header,
     OC_OT_viewer_bg,
+    OC_OT_clear_cache,
     OC_OT_timeline_interact,
 ]
 

@@ -581,9 +581,6 @@ class ReadNode(OpenCompNode):
                     pass
 
             _read_cache[self.name] = (cache_key, tex)
-            t_elapsed = (time.perf_counter() - t_start) * 1000  # ms
-            proxy_label = f" (proxy 1/{proxy_factor})" if proxy_factor > 1 else ""
-            print(f"[OpenComp] Read: {w}x{h}{proxy_label} in {t_elapsed:.1f}ms from {self.filepath}")
             return tex
 
         except Exception as e:

@@ -47,7 +47,7 @@ def _draw_topbar_overlay():
 
     # OpenComp logo/name
     blf.size(0, 15)
-    blf.color(0, 0.3, 0.8, 0.45, 1.0)  # Green
+    blf.color(0, 0.2, 0.55, 0.35, 1.0)  # OpenComp accent
     blf.position(0, x, y, 0)
     blf.draw(0, "OpenComp")
     x += 100

@@ -1250,15 +1250,26 @@ class OC_OT_add_node(Operator):
     )
 
     def execute(self, context):
+        # Try to get tree from current space
         space = context.space_data
-        # Must be in a NODE_EDITOR with an OC_NT_compositor tree
-        if not space or space.type != 'NODE_EDITOR':
-            return {'CANCELLED'}
-        if not hasattr(space, 'node_tree') or not space.node_tree:
-            return {'CANCELLED'}
+        tree = None
 
-        tree = space.node_tree
-        if tree.bl_idname != 'OC_NT_compositor':
+        if space and space.type == 'NODE_EDITOR':
+            tree = getattr(space, 'node_tree', None)
+
+        # Fallback: search all screens for OpenComp tree
+        if not tree or tree.bl_idname != 'OC_NT_compositor':
+            for screen in bpy.data.screens:
+                for area in screen.areas:
+                    if area.type == 'NODE_EDITOR':
+                        for sp in area.spaces:
+                            if sp.type == 'NODE_EDITOR' and sp.node_tree:
+                                if sp.node_tree.bl_idname == 'OC_NT_compositor':
+                                    tree = sp.node_tree
+                                    break
+
+        if not tree or tree.bl_idname != 'OC_NT_compositor':
+            self.report({'WARNING'}, "No OpenComp node tree found")
             return {'CANCELLED'}
 
         # Get position from canvas state
@@ -1458,9 +1469,9 @@ def register():
     # Register draw handlers for custom canvas overlay
     ensure_draw_handler()
 
-    # Register toolbar draw handler
-    from . import toolbar
-    toolbar.register()
+    # Toolbar disabled - too distracting
+    # from . import toolbar
+    # toolbar.register()
 
     # Auto-start the canvas modal after a short delay
     def _start_canvas():
@@ -1476,9 +1487,9 @@ def register():
 
 
 def unregister():
-    # Unregister toolbar draw handler
-    from . import toolbar
-    toolbar.unregister()
+    # Toolbar disabled
+    # from . import toolbar
+    # toolbar.unregister()
 
     remove_draw_handler()
 
