@@ -27,6 +27,8 @@ _viewer_state = {
     "pan": [0.0, 0.0],
     "roi_enabled": False,
     "roi": [0.25, 0.25, 0.75, 0.75],
+    # Active viewer tracking — only the active viewer updates display + HUD
+    "active_viewer": None,     # Name of the active ViewerNode
     # Metadata for HUD display (Nuke-style)
     "source_file": None,       # Source filename from Read node
     "source_node": None,       # Name of the source node
@@ -526,12 +528,125 @@ def _compile_viewer_shader():
     print("[OpenComp] Viewer using built-in IMAGE shader (no display controls)")
 
 
+def _fallback_populate_metadata():
+    """Safety net: populate _viewer_state metadata from _metadata_cache.
+
+    Walks upstream from the active viewer to find the connected Read node,
+    then looks up its metadata.  Falls back to the first available entry
+    in _metadata_cache if the walk fails.
+    """
+    try:
+        from ..io.read import _metadata_cache
+        if not _metadata_cache:
+            return
+
+        target_read = None
+        active_name = _viewer_state.get("active_viewer")
+
+        # Try to find the Read node connected to the active viewer
+        if active_name:
+            for tree in bpy.data.node_groups:
+                if tree.bl_idname != "OC_NT_compositor":
+                    continue
+                viewer = tree.nodes.get(active_name)
+                if viewer is None:
+                    continue
+                # BFS upstream from this viewer
+                visited = set()
+                queue = [viewer]
+                while queue:
+                    node = queue.pop(0)
+                    if node.name in visited:
+                        continue
+                    visited.add(node.name)
+                    if node.bl_idname == "OC_N_read" and node.name in _metadata_cache:
+                        target_read = node.name
+                        break
+                    for inp in node.inputs:
+                        if inp.is_linked:
+                            for link in inp.links:
+                                if link.from_node.name not in visited:
+                                    queue.append(link.from_node)
+                if target_read:
+                    break
+
+        # Final fallback: first available metadata entry
+        if target_read is None:
+            for name, cached in _metadata_cache.items():
+                if cached and cached.get("filename"):
+                    target_read = name
+                    break
+
+        if target_read is None:
+            return
+
+        cached = _metadata_cache[target_read]
+        _viewer_state["source_file"] = cached.get("filename")
+        _viewer_state["source_node"] = target_read
+        _viewer_state["format"] = cached.get("format")
+        _viewer_state["bit_depth"] = cached.get("bit_depth", "32-bit float")
+        _viewer_state["compression"] = cached.get("compression")
+        _viewer_state["channels"] = cached.get("channels")
+        _viewer_state["channel_names"] = cached.get("channel_names")
+        _viewer_state["colorspace"] = cached.get("colorspace")
+        _viewer_state["software"] = cached.get("software")
+        _viewer_state["pixel_aspect"] = cached.get("pixel_aspect", 1.0)
+        _viewer_state["timecode"] = cached.get("timecode")
+        _viewer_state["image_type"] = cached.get("image_type")
+        _viewer_state["nuke_version"] = cached.get("nuke_version")
+        _viewer_state["original_width"] = cached.get("width")
+        _viewer_state["original_height"] = cached.get("height")
+    except Exception:
+        pass
+
+
+def _poll_active_viewer():
+    """Check the node editor for viewer selection changes.
+
+    If the user clicks a ViewerNode in the node graph, that viewer
+    becomes active and its upstream data drives the viewport + HUD.
+    """
+    try:
+        for area in bpy.context.screen.areas:
+            if area.type != 'NODE_EDITOR':
+                continue
+            space = area.spaces.active
+            if not space or not space.node_tree:
+                continue
+            if space.node_tree.bl_idname != "OC_NT_compositor":
+                continue
+
+            tree = space.node_tree
+            active_node = tree.nodes.active
+
+            # If the active node IS a viewer, activate it
+            if active_node and active_node.bl_idname == "OC_N_viewer":
+                if _viewer_state.get("active_viewer") != active_node.name:
+                    _viewer_state["active_viewer"] = active_node.name
+                    # Force re-evaluation so the new viewer's data shows
+                    from ...node_graph.tree import request_evaluate
+                    request_evaluate()
+                return
+
+            # If no viewer is active yet, auto-select the first connected one
+            if _viewer_state.get("active_viewer") is None:
+                for node in tree.nodes:
+                    if node.bl_idname == "OC_N_viewer" and node.inputs[0].is_linked:
+                        _viewer_state["active_viewer"] = node.name
+                        return
+    except Exception:
+        pass
+
+
 def _draw_viewer_callback():
     """Draw handler — renders viewer texture with display controls + HUD."""
     # Only draw in VIEW_3D areas
     context = bpy.context
     if context.area is None or context.area.type != 'VIEW_3D':
         return
+
+    # Poll for viewer selection changes in the node editor
+    _poll_active_viewer()
 
     # Check if evaluation is needed and perform it now (we have GPU context)
     try:
@@ -549,6 +664,11 @@ def _draw_viewer_callback():
     tex = _viewer_state.get("texture")
     if tex is None:
         return
+
+    # Fallback: if texture exists but metadata was not populated by evaluate(),
+    # walk upstream from the active viewer to find the source Read node's metadata.
+    if _viewer_state.get("source_file") is None:
+        _fallback_populate_metadata()
 
     shader = _viewer_state.get("shader")
     batch = _viewer_state.get("batch")
@@ -708,7 +828,7 @@ def _draw_hud(tex):
         parts1 = [source_file]
         if file_format:
             parts1.append(file_format)
-        if compression:
+        if compression and compression != file_format:
             parts1.append(compression)
         parts1.append(bit_depth)
         if image_type:
@@ -980,6 +1100,31 @@ class ViewerNode(OpenCompNode):
                         if upstream.name not in visited:
                             to_visit.append(upstream)
 
+        # Fallback: if BFS didn't find a Read node, scan _metadata_cache directly
+        if metadata["source_file"] is None and _metadata_cache:
+            for node_name, cached in _metadata_cache.items():
+                if cached and cached.get("filename"):
+                    metadata["source_file"] = cached.get("filename")
+                    metadata["source_node"] = node_name
+                    metadata["format"] = cached.get("format")
+                    metadata["bit_depth"] = cached.get("bit_depth", "32-bit float")
+                    metadata["compression"] = cached.get("compression")
+                    metadata["channels"] = cached.get("channels")
+                    metadata["channel_names"] = cached.get("channel_names")
+                    metadata["colorspace"] = cached.get("colorspace")
+                    metadata["software"] = cached.get("software")
+                    metadata["pixel_aspect"] = cached.get("pixel_aspect", 1.0)
+                    metadata["timecode"] = cached.get("timecode")
+                    metadata["image_type"] = cached.get("image_type")
+                    metadata["nuke_version"] = cached.get("nuke_version")
+                    metadata["original_width"] = cached.get("width")
+                    metadata["original_height"] = cached.get("height")
+                    try:
+                        metadata["proxy_factor"] = int(bpy.context.scene.oc_viewer.proxy)
+                    except (AttributeError, ValueError):
+                        metadata["proxy_factor"] = 1
+                    break
+
         # Get current OCIO view transform
         try:
             metadata["view_transform"] = bpy.context.scene.view_settings.view_transform
@@ -989,8 +1134,34 @@ class ViewerNode(OpenCompNode):
         return metadata
 
     def evaluate(self, texture_pool):
-        """Store input texture for the draw handler. Returns None (no output)."""
+        """Store input texture for the draw handler. Returns None (no output).
+
+        Only the *active* viewer updates ``_viewer_state``.  When a single
+        viewer exists it auto-activates.  Multiple viewers coexist; the
+        user selects which one drives the viewport by clicking it in the
+        node graph (or via Ctrl+1..5 routing).
+        """
         try:
+            # Determine if this viewer should drive the display
+            active = _viewer_state.get("active_viewer")
+
+            # Count viewers in our tree to decide auto-activation
+            tree = self.id_data
+            viewers = [n for n in tree.nodes if n.bl_idname == "OC_N_viewer"]
+
+            if active is None or len(viewers) == 1:
+                # Auto-activate: only viewer, or nothing active yet
+                _viewer_state["active_viewer"] = self.name
+                active = self.name
+            elif active not in {n.name for n in viewers}:
+                # Active viewer was deleted — fall back to this one
+                _viewer_state["active_viewer"] = self.name
+                active = self.name
+
+            if self.name != active:
+                # Not the active viewer — skip display update
+                return None
+
             current_frame = bpy.context.scene.frame_current
 
             # Get texture from upstream (Read node handles caching)

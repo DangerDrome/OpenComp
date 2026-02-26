@@ -227,12 +227,19 @@ class OC_OT_viewer_route(bpy.types.Operator):
             self.report({'WARNING'}, "Selected node has no outputs")
             return {'CANCELLED'}
 
-        # Find or create viewer node
+        # Collect all viewer nodes sorted by name for index mapping
+        viewers = sorted(
+            [n for n in tree.nodes if n.bl_idname == "OC_N_viewer"],
+            key=lambda n: n.name,
+        )
+
+        # Pick the viewer matching the requested index (1-based)
         viewer_node = None
-        for node in tree.nodes:
-            if node.bl_idname == "OC_N_viewer":
-                viewer_node = node
-                break
+        idx = self.index - 1  # convert to 0-based
+        if 0 <= idx < len(viewers):
+            viewer_node = viewers[idx]
+        elif viewers:
+            viewer_node = viewers[0]
 
         if viewer_node is None:
             viewer_node = tree.nodes.new("OC_N_viewer")
@@ -246,6 +253,10 @@ class OC_OT_viewer_route(bpy.types.Operator):
 
         # Connect source output → viewer input
         tree.links.new(source_node.outputs[0], viewer_node.inputs[0])
+
+        # Set this viewer as the active viewer for viewport display
+        from .viewer import _viewer_state
+        _viewer_state["active_viewer"] = viewer_node.name
 
         return {'FINISHED'}
 

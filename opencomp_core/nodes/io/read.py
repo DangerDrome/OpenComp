@@ -8,6 +8,9 @@ import bpy
 import os
 import re
 import glob
+import shutil
+import subprocess
+import tempfile
 from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 from ..base import OpenCompNode
@@ -52,6 +55,14 @@ _SEQUENCE_PATTERNS = [
 
 # Supported image extensions for sequences
 _IMAGE_EXTENSIONS = {'.exr', '.png', '.jpg', '.jpeg', '.tif', '.tiff', '.dpx', '.cin', '.hdr'}
+
+# Supported video extensions
+_VIDEO_EXTENSIONS = {'.mp4', '.mov'}
+
+
+def _is_video_file(filepath):
+    """Check if a file is a video format."""
+    return os.path.splitext(filepath)[1].lower() in _VIDEO_EXTENSIONS
 
 
 def detect_sequence(filepath):
@@ -149,14 +160,42 @@ class OC_OT_read_browse(Operator, ImportHelper):
     node_name: bpy.props.StringProperty()
 
     filter_glob: bpy.props.StringProperty(
-        default="*.exr;*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.hdr;*.dpx;*.cin",
+        default="*.exr;*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.hdr;*.dpx;*.cin;*.mp4;*.mov",
         options={'HIDDEN'},
     )
 
     def execute(self, context):
         filepath = self.filepath
 
-        # Check if this is part of a sequence
+        # Check if this is a video file
+        if _is_video_file(filepath):
+            # Get frame count from video
+            frame_duration = 1
+            try:
+                tmp_img = bpy.data.images.load(filepath)
+                frame_duration = tmp_img.frame_duration or 1
+                bpy.data.images.remove(tmp_img)
+            except Exception:
+                pass
+
+            # Find the node and set filepath
+            for tree in bpy.data.node_groups:
+                if tree.bl_idname == "OC_NT_compositor":
+                    node = tree.nodes.get(self.node_name)
+                    if node:
+                        node.filepath = filepath
+                        node.is_sequence = True
+                        node.first_frame = 1
+                        node.last_frame = frame_duration
+                        context.scene.frame_start = 1
+                        context.scene.frame_end = frame_duration
+                        context.scene.frame_set(1)
+                        _zoom_timeline_to_fit()
+                        self.report({'INFO'}, f"Loaded video: {frame_duration} frames")
+                        break
+            return {'FINISHED'}
+
+        # Check if this is part of an image sequence
         seq_info = detect_sequence(filepath)
         if seq_info:
             sequence_path, first_frame, last_frame, frame_count = seq_info
@@ -255,7 +294,28 @@ class OC_OT_read_drop(Operator):
         node_offset = 0
 
         for filepath in filepaths:
-            # Check if this is part of a sequence
+            # Handle video files
+            if _is_video_file(filepath):
+                frame_duration = 1
+                try:
+                    tmp_img = bpy.data.images.load(filepath)
+                    frame_duration = tmp_img.frame_duration or 1
+                    bpy.data.images.remove(tmp_img)
+                except Exception:
+                    pass
+
+                new_node = tree.nodes.new('OC_N_read')
+                new_node.location = (base_location[0] + node_offset, base_location[1])
+                new_node.filepath = filepath
+                new_node.is_sequence = True
+                new_node.first_frame = 1
+                new_node.last_frame = frame_duration
+                seq_info = (filepath, 1, frame_duration, frame_duration)
+                created_nodes.append((new_node, seq_info))
+                node_offset += 250
+                continue
+
+            # Check if this is part of an image sequence
             seq_info = detect_sequence(filepath)
 
             if seq_info:
@@ -334,6 +394,12 @@ _read_cache = {}
 
 # Metadata cache: {node_name: dict} — stores EXR/image metadata for HUD display
 _metadata_cache = {}
+
+# Video image cache: {node_name: (filepath, bpy.types.Image)}
+_video_image_cache = {}
+
+# Video info cache: {node_name: {"filepath": str, "width": int, "height": int}}
+_video_info_cache = {}
 
 
 def _on_prop_update(self, context):
@@ -503,6 +569,10 @@ class ReadNode(OpenCompNode):
             cached = _read_cache.get(self.name)
             if cached and cached[0] == cache_key:
                 return cached[1]
+
+            # Video files use Blender's built-in decoder instead of OIIO
+            if _is_video_file(resolved):
+                return self._evaluate_video(resolved, frame, proxy_factor)
 
             bpy.utils.expose_bundled_modules()
             import OpenImageIO as oiio
@@ -681,13 +751,252 @@ class ReadNode(OpenCompNode):
 
         return metadata
 
+    def _evaluate_video(self, filepath, frame, proxy_factor):
+        """Read video frame — uses ffmpeg for frame-accurate decode.
+
+        Primary path: ffmpeg subprocess piping raw RGBA → numpy (top-down,
+        matches OIIO convention so the shader Y-flip works correctly).
+        Fallback: bpy.data.images with np.flipud (first-frame only).
+        """
+        try:
+            import numpy as np
+            import gpu
+
+            # Get video dimensions (cached after first probe)
+            info = _video_info_cache.get(self.name)
+            if info is None or info["filepath"] != filepath:
+                info = self._probe_video_info(filepath)
+                if info is None:
+                    return None
+                _video_info_cache[self.name] = info
+
+            w, h = info["width"], info["height"]
+
+            # Store metadata for HUD on every evaluation
+            self._store_video_metadata(filepath, w, h)
+
+            # Try ffmpeg for frame-accurate decode
+            ffmpeg_path = shutil.which('ffmpeg')
+            if ffmpeg_path:
+                pixels = self._decode_frame_ffmpeg(
+                    filepath, frame, w, h, ffmpeg_path
+                )
+                if pixels is not None:
+                    return self._upload_video_pixels(
+                        pixels, frame, proxy_factor
+                    )
+
+            # Fallback: bpy.data.images (first frame only, flipped)
+            pixels = self._decode_frame_bpy_fallback(filepath, w, h)
+            if pixels is not None:
+                return self._upload_video_pixels(
+                    pixels, frame, proxy_factor
+                )
+
+            return None
+
+        except Exception as e:
+            print(f"[OpenComp] Video evaluate error: {e}")
+            return None
+
+    def _probe_video_info(self, filepath):
+        """Get video dimensions via bpy.data.images (quick probe)."""
+        try:
+            img_name = f"_oc_vprobe_{self.name}"
+            if img_name in bpy.data.images:
+                bpy.data.images.remove(bpy.data.images[img_name])
+            img = bpy.data.images.load(filepath)
+            img.name = img_name
+            w, h = img.size
+            _video_image_cache[self.name] = (filepath, img)
+            if w == 0 or h == 0:
+                print(f"[OpenComp] Video has zero dimensions: {filepath}")
+                return None
+            return {"filepath": filepath, "width": w, "height": h}
+        except Exception as e:
+            print(f"[OpenComp] Video probe failed: {e}")
+            return None
+
+    def _decode_frame_ffmpeg(self, filepath, frame, w, h, ffmpeg_path):
+        """Decode a specific video frame via ffmpeg rawvideo pipe.
+
+        Returns RGBA float32 numpy array (top-down) or None on failure.
+        """
+        import numpy as np
+
+        # Calculate seek timestamp
+        try:
+            fps = bpy.context.scene.render.fps / bpy.context.scene.render.fps_base
+        except Exception:
+            fps = 24.0
+        timestamp = max(0.0, (frame - 1) / fps)
+
+        cmd = [
+            ffmpeg_path,
+            '-ss', f'{timestamp:.6f}',
+            '-i', filepath,
+            '-frames:v', '1',
+            '-f', 'rawvideo',
+            '-pix_fmt', 'rgba',
+            '-v', 'quiet',
+            'pipe:1',
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, timeout=10
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return None
+
+        if result.returncode != 0:
+            return None
+
+        raw = result.stdout
+        expected = w * h * 4
+        if len(raw) != expected:
+            return None
+
+        # uint8 RGBA → float32, reshape (top-down, matches OIIO convention)
+        pixels = (
+            np.frombuffer(raw, dtype=np.uint8)
+            .astype(np.float32) / 255.0
+        ).reshape(h, w, 4)
+
+        return pixels
+
+    def _decode_frame_bpy_fallback(self, filepath, w, h):
+        """Fallback: read first frame via bpy.data.images with flipud.
+
+        bpy.data.images.pixels[:] returns bottom-to-top (GL convention),
+        but our shader expects top-to-bottom (OIIO convention), so we flip.
+        """
+        import numpy as np
+
+        cached_vid = _video_image_cache.get(self.name)
+        img = None
+        if cached_vid and cached_vid[0] == filepath:
+            img = cached_vid[1]
+            if img.name not in bpy.data.images:
+                img = None
+
+        if img is None:
+            img_name = f"_oc_vprobe_{self.name}"
+            if img_name in bpy.data.images:
+                bpy.data.images.remove(bpy.data.images[img_name])
+            try:
+                img = bpy.data.images.load(filepath)
+                img.name = img_name
+                _video_image_cache[self.name] = (filepath, img)
+            except Exception:
+                return None
+
+        ch = img.channels or 4
+        try:
+            pixels = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, ch)
+        except Exception:
+            return None
+
+        # Ensure RGBA
+        if ch == 3:
+            rgba = np.empty((h, w, 4), dtype=np.float32)
+            rgba[:, :, :3] = pixels
+            rgba[:, :, 3] = 1.0
+            pixels = rgba
+        elif ch == 1:
+            rgba = np.empty((h, w, 4), dtype=np.float32)
+            rgba[:, :, 0] = pixels[:, :, 0]
+            rgba[:, :, 1] = pixels[:, :, 0]
+            rgba[:, :, 2] = pixels[:, :, 0]
+            rgba[:, :, 3] = 1.0
+            pixels = rgba
+
+        # Flip vertically: bpy gives bottom-to-top, shader expects top-to-bottom
+        pixels = np.ascontiguousarray(pixels[::-1, :, :])
+        return pixels
+
+    def _upload_video_pixels(self, pixels, frame, proxy_factor):
+        """Upload numpy RGBA float32 pixels to GPUTexture."""
+        import numpy as np
+        import gpu
+
+        # Proxy downscale
+        if proxy_factor > 1:
+            pixels = np.ascontiguousarray(
+                pixels[::proxy_factor, ::proxy_factor, :]
+            )
+
+        h, w = pixels.shape[0], pixels.shape[1]
+        pixels = np.ascontiguousarray(pixels, dtype=np.float32)
+
+        try:
+            buf = gpu.types.Buffer(
+                'FLOAT', pixels.size, memoryview(pixels.ravel())
+            )
+        except (TypeError, ValueError):
+            import array
+            arr = array.array('f')
+            arr.frombytes(pixels.tobytes())
+            buf = gpu.types.Buffer('FLOAT', len(arr), arr)
+
+        tex = gpu.types.GPUTexture((w, h), format='RGBA32F', data=buf)
+
+        # Cache for sequence playback
+        if self.is_sequence:
+            try:
+                from ..viewer.viewer import cache_frame_with_texture
+                cache_frame_with_texture(frame, tex, pixels, w, h)
+            except ImportError:
+                pass
+
+        cache_key = (self.filepath, frame, proxy_factor)
+        _read_cache[self.name] = (cache_key, tex)
+        return tex
+
+    def _store_video_metadata(self, filepath, width, height):
+        """Store video metadata in _metadata_cache for HUD display."""
+        ext = os.path.splitext(filepath)[1].upper().lstrip('.')
+        metadata = {
+            "filename": os.path.basename(filepath),
+            "width": width,
+            "height": height,
+            "channels": 4,
+            "channel_names": ["R", "G", "B", "A"],
+            "format": ext,
+            "bit_depth": "8-bit",
+            "compression": ext,
+            "colorspace": "",
+            "software": None,
+            "pixel_aspect": 1.0,
+            "framerate": None,
+            "timecode": None,
+            "image_type": "video",
+            "nuke_version": None,
+        }
+        # Get colorspace from cached Blender image
+        cached_vid = _video_image_cache.get(self.name)
+        if cached_vid:
+            try:
+                metadata["colorspace"] = cached_vid[1].colorspace_settings.name
+            except Exception:
+                pass
+        # Get frame rate from scene
+        try:
+            fps = bpy.context.scene.render.fps
+            fps_base = bpy.context.scene.render.fps_base
+            metadata["framerate"] = fps / fps_base
+        except Exception:
+            pass
+        _metadata_cache[self.name] = metadata
+
+
 
 class OC_FH_image_drop(bpy.types.FileHandler):
     """Handle image file drops into OpenComp Node Editor."""
     bl_idname = "OC_FH_image_drop"
     bl_label = "OpenComp Read"
     bl_import_operator = "oc.read_drop"
-    bl_file_extensions = ".exr;.png;.jpg;.jpeg;.tif;.tiff;.hdr;.dpx;.cin"
+    bl_file_extensions = ".exr;.png;.jpg;.jpeg;.tif;.tiff;.hdr;.dpx;.cin;.mp4;.mov"
 
     @classmethod
     def poll_drop(cls, context):
@@ -714,7 +1023,7 @@ def _on_frame_change(scene):
         if tree.bl_idname != "OC_NT_compositor":
             continue
 
-        # Check for sequence Read nodes
+        # Check for sequence/video Read nodes
         for node in tree.nodes:
             if node.bl_idname == "OC_N_read" and getattr(node, 'is_sequence', False):
                 # Invalidate cache for this node so it reloads on next evaluate
@@ -767,6 +1076,16 @@ def unregister():
             pass
     _thumbnail_cache.clear()
     _read_cache.clear()
+
+    # Clean up video images
+    for name, (_, img) in list(_video_image_cache.items()):
+        try:
+            if img and img.name in bpy.data.images:
+                bpy.data.images.remove(img)
+        except Exception:
+            pass
+    _video_image_cache.clear()
+    _video_info_cache.clear()
 
     # Unregister file handler first
     try:
