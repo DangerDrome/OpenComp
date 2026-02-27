@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OpenComp
+Comment=Professional VFX Compositor
+Exec=bash -c "cd $(dirname %k) && ./launch_opencomp.sh"
+Icon=opencomp
+Terminal=false
+Categories=Graphics;ImageProcessing;
+Keywords=compositor;vfx;color;grading;

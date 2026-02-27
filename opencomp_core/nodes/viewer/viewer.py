@@ -15,6 +15,7 @@ display shader as uniforms — they do NOT re-evaluate the node graph.
 
 import bpy
 from ..base import OpenCompNode
+from ... import console
 
 # ── Module-level viewer state ───────────────────────────────────────────
 
@@ -213,7 +214,7 @@ def get_cached_texture(frame):
         entry['texture'] = tex  # Update cache with new texture
         return tex
     except Exception as e:
-        print(f"[OpenComp] Failed to re-upload cached frame {frame} to GPU: {e}")
+        console.error(f"Failed to re-upload cached frame {frame} to GPU: {e}", "Cache")
         return None
 
 
@@ -508,10 +509,10 @@ def _compile_viewer_shader():
         _viewer_state["shader"] = shader
         _viewer_state["batch"] = batch
         _viewer_state["builtin"] = False
-        print("[OpenComp] Viewer display shader compiled")
+        console.shader_compiled("Viewer display")
         return
     except Exception as e:
-        print(f"[OpenComp] Custom shader failed ({type(e).__name__}: {e}), trying built-in")
+        console.warning(f"Custom shader failed ({type(e).__name__}: {e}), trying built-in", "Shader")
 
     # Fallback: built-in IMAGE shader
     shader = gpu.shader.from_builtin('IMAGE')
@@ -525,7 +526,7 @@ def _compile_viewer_shader():
     _viewer_state["shader"] = shader
     _viewer_state["batch"] = batch
     _viewer_state["builtin"] = True
-    print("[OpenComp] Viewer using built-in IMAGE shader (no display controls)")
+    console.info("Viewer using built-in IMAGE shader (no display controls)", "Shader")
 
 
 def _fallback_populate_metadata():
@@ -657,7 +658,7 @@ def _draw_viewer_callback():
             for node_tree in bpy.data.node_groups:
                 if node_tree.bl_idname == "OC_NT_compositor":
                     _evaluate_tree(node_tree)
-    except Exception as e:
+    except Exception:
         # Only print once to avoid spam
         pass
 
@@ -680,7 +681,7 @@ def _draw_viewer_callback():
             shader = _viewer_state["shader"]
             batch = _viewer_state["batch"]
         except Exception as e:
-            print(f"[OpenComp] Viewer shader compile failed: {e}")
+            console.error(f"Viewer shader compile failed: {e}", "Shader")
             return
 
     import gpu
@@ -1008,11 +1009,11 @@ def extract_ocio_display_glsl(view_transform=None):
 
         glsl_text = desc.getShaderText()
         if glsl_text:
-            print(f"[OpenComp] OCIO GLSL extracted for {view_transform}")
+            console.info(f"OCIO GLSL extracted for {view_transform}", "OCIO")
         return glsl_text
 
     except Exception as e:
-        print(f"[OpenComp] OCIO GLSL extraction failed: {e}")
+        console.error(f"OCIO GLSL extraction failed: {e}", "OCIO")
         return None
 
 
@@ -1200,9 +1201,9 @@ class ViewerNode(OpenCompNode):
                 _viewer_state["pixel_aspect"] = 1.0
                 _viewer_state["proxy_factor"] = 1
 
-            return None
+            return input_tex
         except Exception as e:
-            print(f"[OpenComp] ViewerNode.evaluate error: {e}")
+            console.error(f"ViewerNode.evaluate error: {e}", "Node")
             _viewer_state["texture"] = None
             return None
 
@@ -1312,8 +1313,8 @@ def register():
         _timeline_handler = bpy.types.SpaceDopeSheetEditor.draw_handler_add(
             _draw_timeline_cache_bar, (), 'WINDOW', 'POST_PIXEL'
         )
-        print("[OpenComp] Viewer draw handler registered")
-        print("[OpenComp] Timeline cache bar registered")
+        console.registered("Viewer draw handler")
+        console.registered("Timeline cache bar")
 
 
 def unregister():

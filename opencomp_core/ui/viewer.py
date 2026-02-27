@@ -10,6 +10,7 @@ from bpy.types import Header, Operator
 import gpu
 from gpu_extras.batch import batch_for_shader
 import blf
+from .. import console
 
 
 _viewer_draw_handler = None
@@ -328,7 +329,7 @@ def _draw_timeline_strip(region_width, timeline_height):
                     shader.uniform_float("color", (0.2, 0.55, 0.35, 1.0))  # OpenComp accent
                     batch.draw(shader)
     except Exception as e:
-        print(f"[OpenComp] Cache bar error: {e}")
+        console.debug(f"Cache bar error: {e}", "Viewer")
 
     # PLAYHEAD - bright RED line with triangle (highly visible)
     # Clamp current frame to valid range for display
@@ -429,7 +430,7 @@ def _draw_timeline_strip(region_width, timeline_height):
         blf.position(0, cache_x, btn_row_y + 5, 0)
         blf.draw(0, cache_text)
     except Exception as e:
-        print(f"[OpenComp] Cache memory display error: {e}")
+        console.debug(f"Cache memory display error: {e}", "Viewer")
 
     # Frame counter (right side)
     blf.size(0, 14)
@@ -830,7 +831,7 @@ class OC_OT_timeline_interact(Operator):
 
         OC_OT_timeline_interact._is_running = True
         context.window_manager.modal_handler_add(self)
-        print("[OpenComp] Timeline interaction modal started")
+        console.debug("Timeline interaction modal started", "Viewer")
         return {'RUNNING_MODAL'}
 
 
@@ -872,11 +873,11 @@ def register():
     # Unregister default headers
     try:
         bpy.utils.unregister_class(bpy.types.VIEW3D_HT_header)
-    except:
+    except Exception:
         pass
     try:
         bpy.utils.unregister_class(bpy.types.VIEW3D_HT_tool_header)
-    except:
+    except Exception:
         pass
 
     # Auto-start timeline interaction modal
@@ -884,12 +885,12 @@ def register():
         try:
             bpy.ops.oc.timeline_interact('INVOKE_DEFAULT')
         except Exception as e:
-            print(f"[OpenComp] Timeline interact start failed: {e}")
+            console.warning(f"Timeline interact start failed: {e}", "Viewer")
         return None
 
     bpy.app.timers.register(_start_timeline_interact, first_interval=0.7)
 
-    print("[OpenComp] Viewer draw handler registered")
+    console.registered("Viewer draw handler")
 
 
 def unregister():
@@ -914,5 +915,5 @@ def unregister():
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
-        except:
+        except Exception:
             pass

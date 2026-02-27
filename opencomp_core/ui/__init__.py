@@ -9,6 +9,7 @@ Expected layout (like Nuke):
 - NODE_EDITOR on bottom right (node graph)
 """
 
+from .. import console
 from . import hide_blender_ui
 from . import theme
 from . import viewer  # Includes integrated timeline at bottom
@@ -30,7 +31,7 @@ def register():
     """Register all UI modules."""
     for mod in modules:
         mod.register()
-    print("[OpenComp] Nuke-style UI registered")
+    console.registered("Nuke-style UI")
 
 
 def unregister():

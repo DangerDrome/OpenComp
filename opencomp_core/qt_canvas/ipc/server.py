@@ -9,15 +9,16 @@ Auto-starts when add-on registers, polls via bpy.app.timers at 60Hz.
 import socket
 import pathlib
 import select
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
 from .protocol import (
     SOCKET_PATH,
     decode_message, encode_message,
     response_ok, response_error, response_pong,
-    response_eval_complete, response_graph_state,
+    response_graph_state,
     validate_command,
 )
+from ... import console
 
 # Server state
 _server: Optional['IpcServer'] = None
@@ -44,27 +45,27 @@ class IpcServer:
         self.server_socket.bind(str(self.socket_path))
         self.server_socket.listen(1)
 
-        print(f"[OpenComp IPC] Server started at {self.socket_path}")
+        console.launched(f"IPC Server at {self.socket_path}")
 
     def stop(self):
         """Stop the IPC server."""
         if self.client_socket:
             try:
                 self.client_socket.close()
-            except:
+            except Exception:
                 pass
             self.client_socket = None
 
         if self.server_socket:
             try:
                 self.server_socket.close()
-            except:
+            except Exception:
                 pass
             self.server_socket = None
 
         # Clean up socket file
         self.socket_path.unlink(missing_ok=True)
-        print("[OpenComp IPC] Server stopped")
+        console.closed("IPC Server")
 
     def poll(self):
         """Poll for incoming connections and messages.
@@ -92,8 +93,8 @@ class IpcServer:
                 self.client_socket.setblocking(False)
                 self._recv_buffer = b''
                 self._node_id_map.clear()
-                print("[OpenComp IPC] Client connected")
-        except:
+                console.success("IPC client connected", "IPC")
+        except Exception:
             pass
 
     def _process_messages(self):
@@ -105,7 +106,7 @@ class IpcServer:
                 data = self.client_socket.recv(4096)
                 if not data:
                     # Client disconnected
-                    print("[OpenComp IPC] Client disconnected")
+                    console.info("IPC client disconnected", "IPC")
                     self.client_socket.close()
                     self.client_socket = None
                     return
@@ -113,7 +114,7 @@ class IpcServer:
         except BlockingIOError:
             pass
         except (ConnectionResetError, BrokenPipeError):
-            print("[OpenComp IPC] Connection lost")
+            console.warning("IPC connection lost", "IPC")
             self.client_socket = None
             return
 
@@ -130,7 +131,7 @@ class IpcServer:
         if self.client_socket:
             try:
                 self.client_socket.sendall(encode_message(response))
-            except:
+            except Exception:
                 pass
 
     def _handle_command(self, msg: dict) -> dict:
@@ -185,8 +186,6 @@ class IpcServer:
 
     def _handle_node_created(self, msg: dict) -> dict:
         """Handle node_created command."""
-        import bpy
-
         node_id = msg.get('node_id')
         node_type = msg.get('node_type')
         x = msg.get('x', 0)

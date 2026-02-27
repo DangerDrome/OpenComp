@@ -11,6 +11,7 @@ Future: Full bezier spline editing with viewer tools
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class RotoNode(OpenCompNode):
@@ -167,7 +168,7 @@ class RotoNode(OpenCompNode):
             return self._output_texture
 
         except Exception as e:
-            print(f"[OpenComp] RotoNode.evaluate error: {e}")
+            console.error(f"RotoNode.evaluate error: {e}", "Node")
             import traceback
             traceback.print_exc()
             return None

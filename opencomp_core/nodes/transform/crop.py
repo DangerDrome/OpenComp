@@ -8,6 +8,7 @@ Shader:  shaders/crop.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class CropNode(OpenCompNode):
@@ -50,7 +51,7 @@ class CropNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] CropNode.evaluate error: {e}")
+            console.error(f"CropNode.evaluate error: {e}", "Node")
             return None
 
 

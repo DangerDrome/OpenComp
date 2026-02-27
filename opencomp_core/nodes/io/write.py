@@ -7,6 +7,7 @@ Supported formats: EXR, DPX, TIFF (determined by file extension).
 
 import bpy
 from ..base import OpenCompNode
+from ... import console
 
 
 class WriteNode(OpenCompNode):
@@ -44,7 +45,6 @@ class WriteNode(OpenCompNode):
             if input_tex is None or not self.filepath:
                 return None
 
-            import gpu
             bpy.utils.expose_bundled_modules()
             import OpenImageIO as oiio
             import numpy as np
@@ -62,7 +62,7 @@ class WriteNode(OpenCompNode):
             filepath = bpy.path.abspath(self.filepath)
             out = oiio.ImageOutput.create(filepath)
             if out is None:
-                print(f"[OpenComp] WriteNode: cannot create output for {filepath}")
+                console.error(f"WriteNode: cannot create output for {filepath}", "Write")
                 return None
 
             spec = oiio.ImageSpec(w, h, 4, oiio.FLOAT)
@@ -70,11 +70,11 @@ class WriteNode(OpenCompNode):
             out.write_image(pixels)
             out.close()
 
-            print(f"[OpenComp] Write: {w}x{h} → {filepath}")
+            console.success(f"Write: {w}x{h} -> {filepath}", "Write")
             return None  # Write has no output
 
         except Exception as e:
-            print(f"[OpenComp] WriteNode.evaluate error: {e}")
+            console.error(f"WriteNode.evaluate error: {e}", "Node")
             return None
 
 

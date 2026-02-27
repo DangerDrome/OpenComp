@@ -11,9 +11,10 @@ Key responsibilities:
 """
 
 import bpy
-from typing import Optional, Dict, Any, Callable, List, Tuple
+from typing import Optional, Dict, Any, Callable, List
 from dataclasses import dataclass, field
 import uuid
+from .. import console
 
 
 @dataclass
@@ -113,7 +114,7 @@ class NodeGraphBridge:
                 # Store on node if possible
                 try:
                     node['oc_id'] = oc_id
-                except:
+                except Exception:
                     pass
 
             self._id_to_bl_name[oc_id] = node.name
@@ -243,7 +244,7 @@ class NodeGraphBridge:
 
             if from_socket and to_socket:
                 self._blender_tree.links.new(from_socket, to_socket)
-                print(f"[OpenComp Bridge] Connected: {from_bl} -> {to_bl}")
+                console.connection_made(from_bl, from_port, to_bl, to_port)
 
         finally:
             self._syncing = False
@@ -275,7 +276,7 @@ class NodeGraphBridge:
                 if (link.from_node.name == from_bl and
                     link.to_node.name == to_bl):
                     self._blender_tree.links.remove(link)
-                    print(f"[OpenComp Bridge] Disconnected: {from_bl} -> {to_bl}")
+                    console.connection_removed(from_bl, from_port, to_bl, to_port)
                     break
 
         finally:
@@ -310,14 +311,14 @@ class NodeGraphBridge:
             # Store oc_id
             try:
                 node['oc_id'] = oc_id
-            except:
+            except Exception:
                 pass
 
             # Update mappings
             self._id_to_bl_name[oc_id] = node.name
             self._bl_name_to_id[node.name] = oc_id
 
-            print(f"[OpenComp Bridge] Created node: {node.name} ({bl_idname})")
+            console.node_created(node.name, bl_idname, (x, y))
             return node.name
 
         finally:
@@ -338,7 +339,7 @@ class NodeGraphBridge:
             bl_name = self._id_to_bl_name.get(oc_id)
             if bl_name and bl_name in self._blender_tree.nodes:
                 self._blender_tree.nodes.remove(self._blender_tree.nodes[bl_name])
-                print(f"[OpenComp Bridge] Deleted node: {bl_name}")
+                console.node_deleted(bl_name)
 
             # Clean up mappings
             if oc_id in self._id_to_bl_name:
@@ -393,7 +394,7 @@ class NodeGraphBridge:
                 node = self._blender_tree.nodes[bl_name]
                 if hasattr(node, param):
                     setattr(node, param, value)
-                    print(f"[OpenComp Bridge] Set {bl_name}.{param} = {value}")
+                    console.param_changed(bl_name, param, value)
 
         finally:
             self._syncing = False
@@ -447,7 +448,7 @@ class NodeGraphBridge:
             # Rebuild mappings
             self._rebuild_id_mappings()
 
-            print(f"[OpenComp Bridge] Synced {len(state['nodes'])} nodes to Qt")
+            console.synced(len(state['nodes']), "nodes to Qt")
 
         finally:
             self._syncing = False

@@ -11,7 +11,7 @@ SHM Protocol:
 import struct
 import mmap
 import pathlib
-from typing import Optional, Tuple
+from typing import Optional
 
 from qtpy.QtGui import QImage, QPixmap
 from qtpy.QtCore import Qt

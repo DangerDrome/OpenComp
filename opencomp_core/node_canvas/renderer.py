@@ -8,7 +8,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 import blf
 import math
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 from .state import CanvasState, NodeVisual, LinkVisual
 from .icons import draw_icon, get_icon_for_node_type

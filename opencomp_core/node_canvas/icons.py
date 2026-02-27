@@ -300,8 +300,6 @@ def _draw_crop_icon(shader, x: float, y: float, half: float, color):
     """Crop icon - L-shaped corners."""
     gpu.state.blend_set('ALPHA')
 
-    corner_len = half * 0.4
-
     # Top-left corner
     tl = [
         (x - half * 0.7, y + half * 0.3),

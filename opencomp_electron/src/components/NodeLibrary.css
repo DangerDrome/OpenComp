@@ -1,0 +1,154 @@
+/* Node Library Styles - Obsidian-inspired sidebar */
+
+.node-library {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--background-secondary);
+}
+
+.node-library-header {
+  padding: var(--size-4-2) var(--size-4-3);
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.node-library-search {
+  padding: var(--size-4-2);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.node-library-search input {
+  width: 100%;
+  padding: var(--size-4-1) var(--size-4-2);
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.node-library-search input:focus {
+  border-color: var(--text-accent);
+  outline: none;
+}
+
+.node-library-search input::placeholder {
+  color: var(--text-faint);
+}
+
+.node-library-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--size-4-1);
+}
+
+/* Category - Obsidian-style collapsible section */
+.node-library-category {
+  margin-bottom: 2px;
+}
+
+.node-library-category-header {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  width: 100%;
+  padding: var(--size-4-1) var(--size-4-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all var(--anim-duration-fast) var(--anim-motion-smooth);
+}
+
+.node-library-category-header:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+.node-library-category-icon {
+  font-size: 8px;
+  width: 14px;
+  text-align: center;
+  color: var(--text-faint);
+  transition: transform var(--anim-duration-fast);
+}
+
+.node-library-category.expanded .node-library-category-icon {
+  transform: rotate(90deg);
+}
+
+.node-library-category-name {
+  flex: 1;
+  text-align: left;
+}
+
+.node-library-category-count {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+/* Items - Obsidian-style list items */
+.node-library-category-items {
+  padding-left: var(--size-4-4);
+  margin-top: 2px;
+}
+
+.node-library-item {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  padding: var(--size-4-1) var(--size-4-2);
+  border-radius: var(--radius-s);
+  cursor: grab;
+  transition: all var(--anim-duration-fast) var(--anim-motion-smooth);
+  color: var(--text-muted);
+}
+
+.node-library-item:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+.node-library-item:active {
+  cursor: grabbing;
+  background: var(--interactive-normal);
+}
+
+.node-library-item-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.node-library-item-label {
+  color: inherit;
+  font-size: var(--font-ui-small);
+}
+
+/* Empty state */
+.node-library-empty {
+  padding: var(--size-4-4);
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+}
+
+/* Drag preview */
+.node-library-item.dragging {
+  opacity: 0.5;
+}

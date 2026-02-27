@@ -1,0 +1,305 @@
+/* Dockview Obsidian Theme */
+
+.dockview-theme-obsidian {
+  /* Dockview CSS variables */
+  --dv-activegroup-visiblepanel-tab-background-color: var(--background-primary);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--background-secondary);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--background-secondary);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--background-secondary);
+  --dv-tabs-and-actions-container-background-color: var(--background-secondary);
+  --dv-tabs-container-scrollbar-color: var(--scrollbar-thumb-bg);
+  --dv-group-view-background-color: var(--background-primary);
+  --dv-paneview-header-border-color: var(--background-modifier-border);
+  --dv-separator-border: transparent;
+  --dv-icon-hover-background-color: var(--interactive-hover);
+  --dv-floating-box-shadow: var(--shadow-l);
+  --dv-tab-divider-color: var(--background-modifier-border);
+  --dv-drag-over-background-color: rgba(127, 109, 242, 0.15);
+  --dv-drag-over-border-color: var(--text-accent);
+
+  /* Use dockview's built-in border-radius variable */
+  --dv-border-radius: 8px;
+
+  /* Custom gap variable */
+  --panel-gap: 6px;
+  --panel-radius: 8px;
+
+  background: var(--background-secondary) !important;
+  font-family: var(--font-ui);
+  padding: var(--panel-gap) !important;
+}
+
+/* ============================================
+   GAPS BETWEEN PANELS - Using inset on groupview
+   ============================================ */
+
+/* Target the actual dockview groupview class */
+.dockview-theme-obsidian .dv-groupview {
+  position: absolute !important;
+  top: 3px !important;
+  left: 3px !important;
+  right: 3px !important;
+  bottom: 3px !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: var(--panel-radius) !important;
+  overflow: hidden !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  background: var(--background-primary) !important;
+}
+
+/* Tab container */
+.dockview-theme-obsidian .dv-tabs-and-actions-container {
+  height: 32px;
+  min-height: 32px;
+  background: var(--background-secondary) !important;
+  border-bottom: 1px solid var(--background-modifier-border);
+  border-radius: var(--panel-radius) var(--panel-radius) 0 0 !important;
+}
+
+.dockview-theme-obsidian .dv-tabs-container {
+  gap: 0;
+}
+
+/* Individual tabs */
+.dockview-theme-obsidian .dv-tab {
+  height: 32px;
+  padding: 0;
+  background: var(--background-secondary);
+  border-right: 1px solid var(--background-modifier-border);
+  border-bottom: none;
+  min-width: 80px;
+  max-width: 200px;
+  transition: all var(--anim-duration-fast);
+}
+
+.dockview-theme-obsidian .dv-tab:hover {
+  background: var(--interactive-hover);
+}
+
+.dockview-theme-obsidian .dv-tab.dv-active-tab {
+  background: var(--background-primary);
+  border-bottom: 2px solid var(--text-accent);
+  margin-bottom: -1px;
+}
+
+.dockview-theme-obsidian .dv-tab.dv-inactive-tab {
+  background: var(--background-secondary);
+  color: var(--text-muted);
+}
+
+/* Custom tab content */
+.dv-tab-custom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  padding: 0 8px 0 12px;
+  gap: 8px;
+}
+
+.dv-tab-title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dv-tab.dv-inactive-tab .dv-tab-title {
+  color: var(--text-muted);
+}
+
+.dv-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--anim-duration-fast);
+}
+
+.dv-tab:hover .dv-tab-close {
+  opacity: 1;
+}
+
+.dv-tab-close:hover {
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+}
+
+.dv-tab-close svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Actions container (right side of tab bar) */
+.dockview-theme-obsidian .right-actions-container {
+  padding: 0 4px;
+  gap: 2px;
+}
+
+.dockview-theme-obsidian .action-container {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--anim-duration-fast);
+}
+
+.dockview-theme-obsidian .action-container:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+/* Panel content area */
+.dockview-theme-obsidian .dv-content-container {
+  background: var(--background-primary) !important;
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius) !important;
+}
+
+/* Sash (resize handles) - hover effect */
+.dockview-theme-obsidian .dv-sash:hover,
+.dockview-theme-obsidian .dv-sash.dv-active {
+  background: var(--text-accent) !important;
+  transition: background var(--anim-duration-fast);
+}
+
+/* Drag overlay */
+.dockview-theme-obsidian .drop-target-dropzone {
+  background: rgba(127, 109, 242, 0.1);
+  border: 2px dashed var(--text-accent);
+  border-radius: var(--radius-m);
+}
+
+.dockview-theme-obsidian .drop-target-selection {
+  background: rgba(127, 109, 242, 0.2);
+  border: 2px solid var(--text-accent);
+  border-radius: var(--radius-m);
+}
+
+/* Floating panels */
+.dockview-theme-obsidian .dv-floating-group {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-l);
+  overflow: hidden;
+}
+
+.dockview-theme-obsidian .dv-floating-group .tabs-and-actions-container {
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
+}
+
+/* Watermark (empty state) */
+.dv-watermark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-faint);
+  font-size: var(--font-ui-medium);
+  background: var(--background-primary);
+  border: 2px dashed var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  margin: 4px;
+}
+
+/* Pane header (for paneview) */
+.dockview-theme-obsidian .pane-header {
+  height: 28px;
+  background: var(--background-secondary-alt);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Empty group styling */
+.dockview-theme-obsidian .void-container {
+  background: var(--background-primary);
+}
+
+/* Locked tabs (non-closeable) */
+.dockview-theme-obsidian .dv-tab.dv-locked .dv-tab-close {
+  display: none;
+}
+
+/* Tab dragging state */
+.dockview-theme-obsidian .dv-tab.dv-dragging {
+  opacity: 0.6;
+  background: var(--background-secondary);
+}
+
+/* Focus ring */
+.dockview-theme-obsidian .dv-groupview:focus-within .dv-tabs-and-actions-container {
+  border-bottom-color: var(--text-accent);
+}
+
+/* Splitview orientation indicator */
+.dockview-theme-obsidian .split-view-view {
+  position: relative;
+}
+
+/* Improve scrollbar in tab container */
+.dockview-theme-obsidian .tabs-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.dockview-theme-obsidian .tabs-container::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 2px;
+}
+
+.dockview-theme-obsidian .tabs-container::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-active-thumb-bg);
+}
+
+/* Panel-specific styling */
+.dv-panel-content {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Maximize/minimize button styling */
+.dockview-theme-obsidian .dv-default-tab-action {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-s);
+}
+
+.dockview-theme-obsidian .dv-default-tab-action:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+/* Center split indicator during drag */
+.dockview-theme-obsidian .dv-drop-target-center {
+  background: rgba(127, 109, 242, 0.2);
+}

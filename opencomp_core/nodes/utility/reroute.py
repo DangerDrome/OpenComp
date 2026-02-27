@@ -6,6 +6,7 @@ Outputs: Image (RGBA32F, unchanged)
 
 import bpy
 from ..base import OpenCompNode
+from ... import console
 
 
 class RerouteNode(OpenCompNode):
@@ -35,7 +36,7 @@ class RerouteNode(OpenCompNode):
             self._output_texture = input_tex
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] RerouteNode.evaluate error: {e}")
+            console.error(f"RerouteNode.evaluate error: {e}", "Node")
             return None
 
 

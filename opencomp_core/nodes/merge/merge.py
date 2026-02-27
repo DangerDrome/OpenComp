@@ -8,6 +8,7 @@ Shader:  shaders/merge.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 _MODE_ITEMS = [
     ('PLUS',     "Plus",     "Additive blend",  0),
@@ -64,7 +65,7 @@ class MergeNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] MergeNode.evaluate error: {e}")
+            console.error(f"MergeNode.evaluate error: {e}", "Node")
             return None
 
 

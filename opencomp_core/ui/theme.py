@@ -4,6 +4,7 @@ Sets Blender's theme to match Nuke's look and feel.
 """
 
 import bpy
+from .. import console
 
 
 # Nuke color palette
@@ -177,9 +178,9 @@ def apply_nuke_theme():
         _set_color(theme.properties.space, 'header', NUKE_BG_MID)
         _set_color(theme.dopesheet_editor.space, 'header', NUKE_BG_MID)
 
-        print("[OpenComp] Nuke theme applied")
+        console.success("Nuke theme applied", "Theme")
     except Exception as e:
-        print(f"[OpenComp] Theme setup error: {e}")
+        console.error(f"Theme setup error: {e}", "Theme")
 
 
 def register():

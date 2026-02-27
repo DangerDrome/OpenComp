@@ -8,6 +8,7 @@ Shader:  shaders/shuffle.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 _CHANNEL_ITEMS = [
     ('R', "R", "Red channel",    0),
@@ -63,7 +64,7 @@ class ShuffleNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] ShuffleNode.evaluate error: {e}")
+            console.error(f"ShuffleNode.evaluate error: {e}", "Node")
             return None
 
 

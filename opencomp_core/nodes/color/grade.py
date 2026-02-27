@@ -8,6 +8,7 @@ Shader:  shaders/grade.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class GradeNode(OpenCompNode):
@@ -52,7 +53,7 @@ class GradeNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] GradeNode.evaluate error: {e}")
+            console.error(f"GradeNode.evaluate error: {e}", "Node")
             return None
 
 

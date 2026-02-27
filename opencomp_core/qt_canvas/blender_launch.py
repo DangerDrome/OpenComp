@@ -7,7 +7,7 @@ and integrate it with the OpenComp workflow.
 import subprocess
 import sys
 import pathlib
-import time
+from .. import console
 
 
 def get_launch_script_path() -> pathlib.Path:
@@ -40,7 +40,6 @@ def is_canvas_running(socket_path: str = "/tmp/opencomp_ipc.sock") -> bool:
         True if canvas is responding to pings.
     """
     from .ipc.client import IpcClientSync
-    from .ipc.protocol import cmd_ping
 
     client = IpcClientSync(socket_path)
     if not client.connect(timeout=0.5):
@@ -67,12 +66,12 @@ def launch_canvas(socket_path: str = "/tmp/opencomp_ipc.sock",
     python = get_python_executable()
 
     if not launch_script.exists():
-        print(f"[OpenComp] Launch script not found: {launch_script}")
+        console.error(f"Launch script not found: {launch_script}", "Qt")
         return False
 
-    print(f"[OpenComp] Launching Qt canvas...")
-    print(f"[OpenComp]   Python: {python}")
-    print(f"[OpenComp]   Script: {launch_script}")
+    console.info("Launching Qt canvas...", "Qt")
+    console.debug(f"Python: {python}", "Qt")
+    console.debug(f"Script: {launch_script}", "Qt")
 
     # Start process (fire and forget - don't block Blender)
     try:
@@ -82,10 +81,10 @@ def launch_canvas(socket_path: str = "/tmp/opencomp_ipc.sock",
             stderr=subprocess.STDOUT,
             start_new_session=True,  # Detach from Blender
         )
-        print(f"[OpenComp] Canvas process started (PID: {process.pid})")
+        console.launched(f"Canvas process (PID: {process.pid})")
         return True
     except Exception as e:
-        print(f"[OpenComp] Failed to launch canvas: {e}")
+        console.error(f"Failed to launch canvas: {e}", "Qt")
         return False
 
 
@@ -117,7 +116,7 @@ def register_operator():
                 return {'CANCELLED'}
 
     bpy.utils.register_class(OC_OT_launch_canvas)
-    print("[OpenComp] Launch canvas operator registered")
+    console.registered("Launch canvas operator")
 
 
 def unregister_operator():
@@ -126,7 +125,7 @@ def unregister_operator():
 
     try:
         bpy.utils.unregister_class(bpy.types.OC_OT_launch_canvas)
-    except:
+    except Exception:
         pass
 
     # Stop IPC server

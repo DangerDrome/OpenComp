@@ -8,6 +8,7 @@ Shader:  shaders/cdl.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class CDLNode(OpenCompNode):
@@ -51,7 +52,7 @@ class CDLNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] CDLNode.evaluate error: {e}")
+            console.error(f"CDLNode.evaluate error: {e}", "Node")
             return None
 
 

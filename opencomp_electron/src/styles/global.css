@@ -1,0 +1,688 @@
+/* OpenComp Global Styles - Obsidian-inspired Design */
+
+:root {
+  /* ============================================
+     OBSIDIAN COLOR PALETTE (Dark Theme)
+     ============================================ */
+
+  /* Background colors - Obsidian's layered dark scheme */
+  --background-primary: #202020;
+  --background-primary-alt: #1a1a1a;
+  --background-secondary: #161616;
+  --background-secondary-alt: #000000;
+  --background-modifier-cover: rgba(0, 0, 0, 0.8);
+  --background-modifier-border: #333;
+
+  /* Text colors */
+  --text-normal: #dcddde;
+  --text-muted: #999;
+  --text-faint: #666;
+  --text-on-accent: #dcddde;
+
+  /* Accent colors - Obsidian's purple/violet */
+  --text-accent: #7f6df2;
+  --text-accent-hover: #8875ff;
+  --interactive-accent: #483699;
+  --interactive-accent-hover: #4d3ca6;
+
+  /* Interactive elements */
+  --interactive-normal: #2a2a2a;
+  --interactive-hover: #303030;
+
+  /* Highlights and selection */
+  --text-highlight-bg: rgba(255, 255, 0, 0.4);
+  --text-highlight-bg-active: rgba(255, 128, 0, 0.4);
+  --text-selection: rgba(23, 48, 77, 0.99);
+
+  /* Scrollbar */
+  --scrollbar-bg: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb-bg: rgba(255, 255, 255, 0.1);
+  --scrollbar-active-thumb-bg: rgba(255, 255, 255, 0.2);
+
+  /* Node-specific colors (data type indicators) */
+  --socket-image: #e5c07b;
+  --socket-float: #61afef;
+  --socket-int: #c678dd;
+  --socket-bool: #e06c75;
+  --socket-vector: #98c379;
+
+  /* Status colors */
+  --color-green: #98c379;
+  --color-yellow: #e5c07b;
+  --color-red: #e06c75;
+  --color-blue: #61afef;
+
+  /* Spacing - Obsidian uses consistent, moderate spacing */
+  --size-4-1: 4px;
+  --size-4-2: 8px;
+  --size-4-3: 12px;
+  --size-4-4: 16px;
+  --size-4-6: 24px;
+  --size-4-8: 32px;
+
+  /* Radius - Obsidian uses subtle rounding */
+  --radius-s: 4px;
+  --radius-m: 6px;
+  --radius-l: 8px;
+
+  /* Shadows - Obsidian uses very subtle shadows */
+  --shadow-s: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-m: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-l: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  /* Transitions - Obsidian has smooth, quick transitions */
+  --anim-duration-fast: 100ms;
+  --anim-duration-moderate: 200ms;
+  --anim-motion-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Typography */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Monaco", "Inconsolata", "Roboto Mono", monospace;
+  --font-ui-small: 12px;
+  --font-ui-medium: 13px;
+  --font-ui-large: 14px;
+
+  /* Node dimensions */
+  --node-min-width: 160px;
+  --node-header-height: 26px;
+  --socket-size: 10px;
+}
+
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-family: var(--font-ui);
+  font-size: var(--font-ui-medium);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbars - Obsidian style */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-active-thumb-bg);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* Selection */
+::selection {
+  background: var(--text-selection);
+}
+
+/* Focus outline - Obsidian style */
+:focus-visible {
+  outline: 2px solid var(--text-accent);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   APP LAYOUT - Obsidian-inspired structure
+   ============================================ */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--background-secondary);
+}
+
+/* Header - Obsidian-style titlebar */
+.app-header {
+  height: 36px;
+  background: var(--background-secondary-alt);
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--size-4-3);
+  gap: var(--size-4-3);
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.app-header button,
+.app-header .toolbar {
+  -webkit-app-region: no-drag;
+}
+
+/* Legacy support - can be removed if not used */
+.app-content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  background: var(--background-secondary);
+}
+
+.app-sidebar {
+  width: 220px;
+  background: var(--background-secondary);
+  border-right: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--background-primary);
+}
+
+/* Dockview container */
+.app-dockview {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ============================================
+   BUTTONS - Obsidian style
+   ============================================ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--size-4-1);
+  padding: var(--size-4-1) var(--size-4-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  transition: all var(--anim-duration-fast) var(--anim-motion-smooth);
+}
+
+.btn:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+.btn:active {
+  background: var(--interactive-normal);
+}
+
+.btn-primary {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.btn-primary:hover {
+  background: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
+}
+
+/* ============================================
+   INPUTS - Obsidian style
+   ============================================ */
+
+.input,
+input[type="text"],
+input[type="number"] {
+  padding: var(--size-4-1) var(--size-4-2);
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  font-family: var(--font-ui);
+  font-size: var(--font-ui-small);
+  transition: border-color var(--anim-duration-fast);
+}
+
+.input:focus,
+input[type="text"]:focus,
+input[type="number"]:focus {
+  border-color: var(--text-accent);
+  outline: none;
+}
+
+/* ============================================
+   PANELS - Obsidian style
+   ============================================ */
+
+.panel {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+}
+
+.panel-header {
+  padding: var(--size-4-2) var(--size-4-3);
+  background: var(--background-secondary-alt);
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-weight: 600;
+  font-size: var(--font-ui-small);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.panel-content {
+  padding: var(--size-4-3);
+}
+
+/* ============================================
+   REACT FLOW OVERRIDES - Obsidian style
+   ============================================ */
+
+.react-flow {
+  background: var(--background-primary) !important;
+}
+
+.react-flow__background {
+  background: var(--background-primary) !important;
+}
+
+.react-flow__background pattern circle {
+  fill: var(--text-faint) !important;
+}
+
+.react-flow__minimap {
+  background: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: var(--radius-m) !important;
+  overflow: hidden !important;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(0, 0, 0, 0.6) !important;
+}
+
+.react-flow__controls {
+  background: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: var(--radius-m) !important;
+  box-shadow: var(--shadow-m) !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-muted) !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--interactive-hover) !important;
+  color: var(--text-normal) !important;
+}
+
+.react-flow__edge-path {
+  stroke: var(--socket-image) !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--text-accent) !important;
+  stroke-width: 2.5 !important;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 2.5 !important;
+}
+
+.react-flow__connection {
+  z-index: 1000 !important;
+  pointer-events: none;
+}
+
+.react-flow__connection-line {
+  stroke: var(--text-accent) !important;
+  stroke-width: 3 !important;
+  fill: none !important;
+}
+
+.react-flow__connection-path {
+  stroke: var(--text-accent) !important;
+  stroke-width: 3 !important;
+  fill: none !important;
+}
+
+@keyframes dashdraw {
+  from { stroke-dashoffset: 10; }
+  to { stroke-dashoffset: 0; }
+}
+
+.react-flow__selection {
+  background: rgba(127, 109, 242, 0.08) !important;
+  border: 1px dashed var(--text-accent) !important;
+}
+
+.react-flow__node.selected {
+  filter: drop-shadow(0 0 6px rgba(127, 109, 242, 0.4));
+}
+
+.react-flow__pane {
+  cursor: default !important;
+}
+
+.react-flow__pane.dragging {
+  cursor: grabbing !important;
+}
+
+/* Node Canvas */
+.node-canvas {
+  width: 100%;
+  height: 100%;
+  background: var(--background-primary);
+}
+
+/* ============================================
+   LOGO - Obsidian style
+   ============================================ */
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  font-weight: 600;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+}
+
+.logo-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-accent);
+}
+
+/* ============================================
+   TIMELINE - Obsidian-inspired
+   ============================================ */
+
+.timeline {
+  height: 44px;
+  background: var(--background-secondary);
+  border-top: 1px solid var(--background-modifier-border);
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-3);
+  padding: 0 var(--size-4-3);
+  user-select: none;
+}
+
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.timeline-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--anim-duration-fast) var(--anim-motion-smooth);
+}
+
+.timeline-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.timeline-btn:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+.timeline-btn:active {
+  background: var(--interactive-normal);
+}
+
+.timeline-btn-play {
+  width: 30px;
+  height: 30px;
+  background: var(--interactive-normal);
+  border: 1px solid var(--background-modifier-border);
+  margin: 0 var(--size-4-1);
+}
+
+.timeline-btn-play:hover {
+  border-color: var(--text-accent);
+}
+
+.timeline-btn-play.active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.timeline-btn-play svg {
+  width: 14px;
+  height: 14px;
+}
+
+.timeline-frame-info {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  min-width: 90px;
+}
+
+.timeline-frame-input {
+  width: 56px;
+  padding: var(--size-4-1);
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: center;
+}
+
+.timeline-frame-input:focus {
+  border-color: var(--text-accent);
+  outline: none;
+}
+
+.timeline-frame-input::-webkit-inner-spin-button,
+.timeline-frame-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.timeline-frame-range {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.timeline-scrubber {
+  flex: 1;
+  height: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.timeline-scrubber-track {
+  height: 4px;
+  background: var(--background-primary-alt);
+  border-radius: 2px;
+  position: relative;
+  overflow: visible;
+}
+
+.timeline-scrubber-progress {
+  height: 100%;
+  background: var(--interactive-accent);
+  border-radius: 2px 0 0 2px;
+  transition: width 50ms linear;
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 14px;
+  background: var(--text-accent);
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.timeline-playhead::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid var(--text-accent);
+}
+
+.timeline-markers {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font-size: 9px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}
+
+.timeline-range-info {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  min-width: 50px;
+}
+
+.timeline-fps {
+  font-size: 10px;
+  color: var(--text-faint);
+  background: var(--interactive-normal);
+  padding: 2px 6px;
+  border-radius: var(--radius-s);
+}
+
+/* ============================================
+   LOADING STATE
+   ============================================ */
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--size-4-4);
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--background-modifier-border);
+  border-top-color: var(--text-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-faint {
+  color: var(--text-faint);
+}
+
+.text-accent {
+  color: var(--text-accent);
+}
+
+/* Divider */
+.divider {
+  height: 1px;
+  background: var(--background-modifier-border);
+  margin: var(--size-4-2) 0;
+}
+
+/* Icon button */
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--anim-duration-fast);
+}
+
+.icon-btn:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}

@@ -2,27 +2,25 @@
 
 Inputs:  (none — source node)
 Outputs: Image (RGBA32F, linear scene-referred)
+
+NOTE: subprocess is used for ffprobe/ffmpeg video support - approved exception.
 """
 
 import bpy
-import os
 import re
 import glob
 import shutil
-import subprocess
-import tempfile
+import subprocess  # Approved exception for video file support (ffprobe/ffmpeg)
+from pathlib import Path
 from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 from ..base import OpenCompNode
+from ... import console
 
 
 def _zoom_timeline_to_fit():
     """Zoom the timeline to fit the current frame range."""
     try:
-        scene = bpy.context.scene
-        frame_start = scene.frame_start
-        frame_end = scene.frame_end
-
         # Find timeline area
         for area in bpy.context.screen.areas:
             if area.type == 'DOPESHEET_EDITOR':
@@ -62,7 +60,7 @@ _VIDEO_EXTENSIONS = {'.mp4', '.mov'}
 
 def _is_video_file(filepath):
     """Check if a file is a video format."""
-    return os.path.splitext(filepath)[1].lower() in _VIDEO_EXTENSIONS
+    return Path(filepath).suffix.lower() in _VIDEO_EXTENSIONS
 
 
 def detect_sequence(filepath):
@@ -73,12 +71,13 @@ def detect_sequence(filepath):
         - sequence_path uses #### notation for frame numbers
         - Example: /path/to/image.####.exr
     """
-    if not os.path.exists(filepath):
+    path = Path(filepath)
+    if not path.exists():
         return None
 
-    directory = os.path.dirname(filepath)
-    filename = os.path.basename(filepath)
-    ext = os.path.splitext(filename)[1].lower()
+    directory = str(path.parent)
+    filename = path.name
+    ext = path.suffix.lower()
 
     # Only process known image formats
     if ext not in _IMAGE_EXTENSIONS:
@@ -104,9 +103,8 @@ def detect_sequence(filepath):
                 separator = ''
 
             # Build glob pattern to find all frames
-            glob_pattern = os.path.join(
-                directory,
-                f"{prefix}{separator}{'?' * padding}.{extension}"
+            glob_pattern = str(
+                Path(directory) / f"{prefix}{separator}{'?' * padding}.{extension}"
             )
 
             # Find all matching files
@@ -116,7 +114,7 @@ def detect_sequence(filepath):
                 # Extract frame numbers and sort
                 frames = []
                 for f in matching_files:
-                    m = pattern.match(os.path.basename(f))
+                    m = pattern.match(Path(f).name)
                     if m:
                         frames.append(int(m.group(2)))
 
@@ -128,9 +126,8 @@ def detect_sequence(filepath):
 
                     # Build sequence path with #### notation
                     hash_padding = '#' * padding
-                    sequence_path = os.path.join(
-                        directory,
-                        f"{prefix}{separator}{hash_padding}.{extension}"
+                    sequence_path = str(
+                        Path(directory) / f"{prefix}{separator}{hash_padding}.{extension}"
                     )
 
                     return (sequence_path, first_frame, last_frame, frame_count)
@@ -199,8 +196,8 @@ class OC_OT_read_browse(Operator, ImportHelper):
         seq_info = detect_sequence(filepath)
         if seq_info:
             sequence_path, first_frame, last_frame, frame_count = seq_info
-            print(f"[OpenComp] Detected sequence: {sequence_path}")
-            print(f"[OpenComp]   Frames {first_frame}-{last_frame} ({frame_count} files)")
+            console.info(f"Detected sequence: {sequence_path}", "Read")
+            console.info(f"  Frames {first_frame}-{last_frame} ({frame_count} files)", "Read")
             filepath = sequence_path  # Use the #### pattern path
 
         # Find the node and set filepath
@@ -269,9 +266,9 @@ class OC_OT_read_drop(Operator):
         # Check if we have files from FileHandler (drag-drop from OS)
         if self.files and self.directory:
             for file_elem in self.files:
-                fp = os.path.join(self.directory, file_elem.name)
-                if os.path.exists(fp):
-                    filepaths.append(fp)
+                fp = Path(self.directory) / file_elem.name
+                if fp.exists():
+                    filepaths.append(str(fp))
         elif self.filepath:
             filepaths.append(self.filepath)
 
@@ -378,7 +375,7 @@ class OC_OT_read_drop(Operator):
                 _zoom_timeline_to_fit()
                 self.report({'INFO'}, f"Loaded sequence: {frame_count} frames ({first_frame}-{last_frame})")
             else:
-                self.report({'INFO'}, f"Loaded: {os.path.basename(node.filepath)}")
+                self.report({'INFO'}, f"Loaded: {Path(node.filepath).name}")
         else:
             self.report({'INFO'}, f"Created {len(created_nodes)} Read nodes")
 
@@ -470,8 +467,7 @@ class ReadNode(OpenCompNode):
 
         # Load image into Blender for preview
         try:
-            import os
-            if not os.path.exists(resolved):
+            if not Path(resolved).exists():
                 return None
 
             # Use a unique name based on node name to avoid conflicts
@@ -491,7 +487,7 @@ class ReadNode(OpenCompNode):
             _thumbnail_cache[self.name] = (resolved, img)
             return img
         except Exception as e:
-            print(f"[OpenComp] Could not load thumbnail: {e}")
+            console.warning(f"Could not load thumbnail: {e}", "Read")
             return None
 
     def draw_buttons(self, context, layout):
@@ -562,7 +558,7 @@ class ReadNode(OpenCompNode):
                         if tex is not None:
                             return tex  # Fast path: return cached GPU texture directly
                 except ImportError as e:
-                    print(f"[OpenComp] Cache import error: {e}")
+                    console.error(f"Cache import error: {e}", "Read")
 
             # Return cached texture if filepath + frame + proxy haven't changed
             cache_key = (self.filepath, frame, proxy_factor)
@@ -578,37 +574,102 @@ class ReadNode(OpenCompNode):
             import OpenImageIO as oiio
             import numpy as np
             import gpu
-            import time
-
-            t_start = time.perf_counter()
 
             # Enable multithreaded reading (helps with EXR decompression)
             config = oiio.ImageSpec()
             config["oiio:threads"] = 0  # 0 = use all available cores
             inp = oiio.ImageInput.open(resolved, config)
             if inp is None:
-                print(f"[OpenComp] ReadNode: cannot open {self.filepath}")
+                console.error(f"ReadNode: cannot open {self.filepath}", "Read")
                 return None
 
             spec = inp.spec()
+
+            # ── Debug: Log EXR-specific info ──
+            is_exr = resolved.lower().endswith('.exr')
+            if is_exr:
+                console.info(f"EXR Debug: {spec.width}x{spec.height}, channels={spec.nchannels}, "
+                           f"format={spec.format}, channelnames={spec.channelnames}", "Read")
+                # Check for tile info and other EXR specifics
+                console.info(f"EXR Extra: tile={spec.tile_width}x{spec.tile_height}, "
+                           f"deep={spec.deep}, channel_formats={[str(spec.channelformat(i)) for i in range(min(spec.nchannels, 4))]}", "Read")
 
             # ── Extract metadata from OIIO spec ──
             metadata = self._extract_metadata(spec, resolved)
             _metadata_cache[self.name] = metadata
 
-            # Read image data
-            pixels = inp.read_image(oiio.FLOAT)
-            pixels = pixels.reshape(spec.height, spec.width, spec.nchannels)
+            # Read image data - use explicit channel range for multi-channel EXR
+            num_channels = spec.nchannels
+            if is_exr and spec.nchannels > 4:
+                # For multi-channel EXR, read only first 4 channels
+                raw_pixels = inp.read_image(oiio.FLOAT, chbegin=0, chend=4)
+                num_channels = 4
+                console.info(f"EXR: Read only 4 of {spec.nchannels} channels", "Read")
+            else:
+                raw_pixels = inp.read_image(oiio.FLOAT)
 
-            # Ensure RGBA — pad missing channels (optimized with pre-allocation)
-            if spec.nchannels == 3:
-                # Pre-allocate RGBA and copy RGB + set alpha=1
+            # Debug: Check raw pixel type and size
+            if is_exr:
+                raw_dtype = raw_pixels.dtype if hasattr(raw_pixels, 'dtype') else 'N/A'
+                raw_shape = raw_pixels.shape if hasattr(raw_pixels, 'shape') else 'N/A'
+                console.info(f"EXR Raw: type={type(raw_pixels)}, dtype={raw_dtype}, shape={raw_shape}, "
+                           f"expected_flat={spec.height * spec.width * num_channels}", "Read")
+
+            # Explicit conversion to numpy float32 array
+            # OIIO may return pre-shaped array or flat array depending on version
+            pixels = np.array(raw_pixels, dtype=np.float32)
+            expected_size = spec.height * spec.width * num_channels
+
+            if is_exr:
+                console.info(f"EXR Converted: shape={pixels.shape}, size={pixels.size}, expected={expected_size}", "Read")
+
+            # Ensure proper shape (height, width, channels)
+            if pixels.ndim == 1:
+                # Flat array - reshape it
+                pixels = pixels.reshape(spec.height, spec.width, num_channels)
+            elif pixels.ndim == 3 and pixels.shape == (spec.height, spec.width, num_channels):
+                # Already properly shaped
+                pass
+            else:
+                # Try to reshape from whatever we got
+                pixels = pixels.reshape(spec.height, spec.width, num_channels)
+
+            # CRITICAL: Force C-contiguous memory layout
+            # Half-float EXR data may have non-standard memory order after OIIO conversion
+            if not pixels.flags['C_CONTIGUOUS']:
+                console.info(f"EXR: Fixing non-contiguous array", "Read")
+                pixels = np.ascontiguousarray(pixels, dtype=np.float32)
+
+            if is_exr:
+                console.info(f"EXR Final: shape={pixels.shape}, contiguous={pixels.flags['C_CONTIGUOUS']}, "
+                           f"dtype={pixels.dtype}, strides={pixels.strides}", "Read")
+                # Sample some pixel values to verify data integrity
+                mid_y, mid_x = pixels.shape[0] // 2, pixels.shape[1] // 2
+                sample = pixels[mid_y, mid_x, :]
+                console.info(f"EXR Sample pixel [{mid_y},{mid_x}]: R={sample[0]:.4f} G={sample[1]:.4f} B={sample[2]:.4f} A={sample[3]:.4f}", "Read")
+                # Check min/max to see if values are in expected range
+                console.info(f"EXR Range: min={pixels.min():.4f}, max={pixels.max():.4f}", "Read")
+
+            # Ensure RGBA — handle all channel counts
+            if num_channels == 4:
+                # Already RGBA, ensure contiguous
+                pixels = np.ascontiguousarray(pixels, dtype=np.float32)
+            elif num_channels == 3:
+                # RGB → RGBA (add alpha=1)
                 rgba = np.empty((spec.height, spec.width, 4), dtype=np.float32)
                 rgba[:, :, :3] = pixels
                 rgba[:, :, 3] = 1.0
                 pixels = rgba
-            elif spec.nchannels == 1:
-                # Grayscale to RGBA
+            elif num_channels == 2:
+                # Luminance + Alpha → RGBA
+                rgba = np.empty((spec.height, spec.width, 4), dtype=np.float32)
+                rgba[:, :, 0] = pixels[:, :, 0]
+                rgba[:, :, 1] = pixels[:, :, 0]
+                rgba[:, :, 2] = pixels[:, :, 0]
+                rgba[:, :, 3] = pixels[:, :, 1]
+                pixels = rgba
+            elif num_channels == 1:
+                # Grayscale → RGBA
                 rgba = np.empty((spec.height, spec.width, 4), dtype=np.float32)
                 rgba[:, :, 0] = pixels[:, :, 0]
                 rgba[:, :, 1] = pixels[:, :, 0]
@@ -628,19 +689,43 @@ class ReadNode(OpenCompNode):
             # Falls back to array.array method if direct pass fails
             pixels = np.ascontiguousarray(pixels, dtype=np.float32)
 
-            try:
-                # Attempt 1: Direct memoryview (fastest if supported)
-                buf = gpu.types.Buffer('FLOAT', pixels.size, memoryview(pixels.ravel()))
-            except (TypeError, ValueError):
-                # Attempt 2: array.array (still fast)
-                import array
-                arr = array.array('f')
-                arr.frombytes(pixels.tobytes())
-                buf = gpu.types.Buffer('FLOAT', len(arr), arr)
+            if is_exr:
+                console.info(f"EXR Buffer: creating GPU buffer, pixels shape={pixels.shape}, "
+                           f"strides={pixels.strides}, dtype={pixels.dtype}", "Read")
+
+            # Use list conversion for GPU buffer - most reliable method
+            # The flatten().tolist() ensures proper memory layout regardless of source format
+            flat_pixels = pixels.flatten().tolist()
+            buf = gpu.types.Buffer('FLOAT', len(flat_pixels), flat_pixels)
+
+            if is_exr:
+                console.info(f"EXR Buffer: created via tolist, size={len(flat_pixels)}", "Read")
 
             tex = gpu.types.GPUTexture(
                 (w, h), format='RGBA32F', data=buf
             )
+
+            # Cache raw pixels for SHM output (bypasses unreliable GPU readback in headless mode)
+            # Store the pre-flattened pixels array (still h, w, 4 shape)
+            from opencomp_core.node_graph.tree import _node_pixels
+            # NOTE: OpenGL textures are bottom-to-top, but our pixels are top-to-bottom from OIIO
+            # We need to flip for SHM output which expects top-to-bottom
+            _node_pixels[self.name] = (w, h, pixels.copy())
+            console.info(f"Cached pixels for SHM: {w}x{h}, shape={pixels.shape}", "Read")
+
+            # DEBUG: Verify texture data immediately after creation
+            if is_exr:
+                try:
+                    readback = tex.read()
+                    readback_arr = np.array(readback, dtype=np.float32)
+                    if readback_arr.shape == (h, w, 4):
+                        mid_y, mid_x = h // 2, w // 2
+                        rb_sample = readback_arr[mid_y, mid_x, :]
+                        console.info(f"EXR Readback verify [{mid_y},{mid_x}]: R={rb_sample[0]:.4f} G={rb_sample[1]:.4f} B={rb_sample[2]:.4f} A={rb_sample[3]:.4f}", "Read")
+                    else:
+                        console.info(f"EXR Readback shape mismatch: {readback_arr.shape} vs expected ({h}, {w}, 4)", "Read")
+                except Exception as e:
+                    console.error(f"EXR Readback verify failed: {e}", "Read")
 
             # Cache both GPU texture and pixel data for sequences (enables real-time playback)
             if self.is_sequence:
@@ -654,20 +739,20 @@ class ReadNode(OpenCompNode):
             return tex
 
         except Exception as e:
-            print(f"[OpenComp] ReadNode.evaluate error: {e}")
+            console.error(f"ReadNode.evaluate error: {e}", "Node")
             return None
 
     def _extract_metadata(self, spec, filepath):
         """Extract metadata from OIIO ImageSpec for HUD display."""
-        import os
+        path = Path(filepath)
 
         metadata = {
-            "filename": os.path.basename(filepath),
+            "filename": path.name,
             "width": spec.width,
             "height": spec.height,
             "channels": spec.nchannels,
             "channel_names": list(spec.channelnames) if spec.channelnames else [],
-            "format": os.path.splitext(filepath)[1].upper().lstrip("."),
+            "format": path.suffix.upper().lstrip("."),
             "bit_depth": None,
             "compression": None,
             "colorspace": None,
@@ -759,9 +844,6 @@ class ReadNode(OpenCompNode):
         Fallback: bpy.data.images with np.flipud (first-frame only).
         """
         try:
-            import numpy as np
-            import gpu
-
             # Get video dimensions (cached after first probe)
             info = _video_info_cache.get(self.name)
             if info is None or info["filepath"] != filepath:
@@ -796,7 +878,7 @@ class ReadNode(OpenCompNode):
             return None
 
         except Exception as e:
-            print(f"[OpenComp] Video evaluate error: {e}")
+            console.error(f"Video evaluate error: {e}", "Read")
             return None
 
     def _probe_video_info(self, filepath):
@@ -810,11 +892,11 @@ class ReadNode(OpenCompNode):
             w, h = img.size
             _video_image_cache[self.name] = (filepath, img)
             if w == 0 or h == 0:
-                print(f"[OpenComp] Video has zero dimensions: {filepath}")
+                console.error(f"Video has zero dimensions: {filepath}", "Read")
                 return None
             return {"filepath": filepath, "width": w, "height": h}
         except Exception as e:
-            print(f"[OpenComp] Video probe failed: {e}")
+            console.error(f"Video probe failed: {e}", "Read")
             return None
 
     def _decode_frame_ffmpeg(self, filepath, frame, w, h, ffmpeg_path):
@@ -955,9 +1037,10 @@ class ReadNode(OpenCompNode):
 
     def _store_video_metadata(self, filepath, width, height):
         """Store video metadata in _metadata_cache for HUD display."""
-        ext = os.path.splitext(filepath)[1].upper().lstrip('.')
+        path = Path(filepath)
+        ext = path.suffix.upper().lstrip('.')
         metadata = {
-            "filename": os.path.basename(filepath),
+            "filename": path.name,
             "width": width,
             "height": height,
             "channels": 4,
@@ -1015,8 +1098,6 @@ class OC_FH_image_drop(bpy.types.FileHandler):
 @bpy.app.handlers.persistent
 def _on_frame_change(scene):
     """Handle frame changes to update sequence Read nodes."""
-    current_frame = scene.frame_current
-
     # Find all OpenComp node trees
     has_sequences = False
     for tree in bpy.data.node_groups:
@@ -1037,7 +1118,7 @@ def _on_frame_change(scene):
             from ...node_graph.tree import request_evaluate
             request_evaluate()
         except ImportError as e:
-            print(f"[OpenComp] Frame change import error: {e}")
+            console.error(f"Frame change import error: {e}", "Read")
 
         # Tag all relevant areas for redraw (including timeline for cache bar)
         for window in bpy.context.window_manager.windows:
@@ -1055,7 +1136,7 @@ def register():
     try:
         bpy.utils.register_class(OC_FH_image_drop)
     except Exception as e:
-        print(f"[OpenComp] Could not register file handler: {e}")
+        console.warning(f"Could not register file handler: {e}", "Read")
 
     # Register frame change handler for sequence playback
     if _on_frame_change not in bpy.app.handlers.frame_change_post:

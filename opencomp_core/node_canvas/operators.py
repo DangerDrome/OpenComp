@@ -12,6 +12,7 @@ from .state import (
     sync_from_tree, write_node_positions_to_tree, write_selection_to_tree
 )
 from .renderer import NodeCanvasRenderer
+from .. import console
 
 
 # Global state
@@ -149,7 +150,6 @@ def _check_pending_link_cleanup():
 
     # Check if there's an active menu/popup by looking for temporary windows or popup regions
     # If no popup is active and no node was added, the menu was dismissed
-    has_popup = False
     try:
         # Check for popup menus - they have a specific window type or region
         for window in bpy.context.window_manager.windows:
@@ -175,7 +175,7 @@ def _check_pending_link_cleanup():
                     area.tag_redraw()
 
             return None  # Stop timer
-    except:
+    except Exception:
         pass
 
     # Keep checking every 100ms
@@ -196,7 +196,7 @@ def _is_popup_active():
         # Check if there are multiple windows (popups create temporary windows)
         if len(bpy.context.window_manager.windows) > 1:
             return True
-    except:
+    except Exception:
         pass
     return False
 
@@ -260,19 +260,19 @@ def ensure_draw_handler():
         _draw_handler = bpy.types.SpaceNodeEditor.draw_handler_add(
             _draw_callback, (), 'WINDOW', 'POST_PIXEL'
         )
-        print("[OpenComp] Canvas draw handler registered")
+        console.registered("Canvas draw handler")
 
     if _header_handler is None:
         _header_handler = bpy.types.SpaceNodeEditor.draw_handler_add(
             _draw_header_callback, (), 'HEADER', 'POST_PIXEL'
         )
-        print("[OpenComp] Canvas header handler registered")
+        console.registered("Canvas header handler")
 
     if _sidebar_handler is None:
         _sidebar_handler = bpy.types.SpaceNodeEditor.draw_handler_add(
             _draw_sidebar_callback, (), 'UI', 'POST_PIXEL'
         )
-        print("[OpenComp] Canvas sidebar handler registered")
+        console.registered("Canvas sidebar handler")
 
 
 def remove_draw_handler():
@@ -702,11 +702,7 @@ class OC_OT_canvas_modal(Operator):
                         px = nv.x + (port_index + 1) * nv.width / (num_ports + 1)
                         py = nv.y if is_output else nv.y + nv.height
                         sx, sy = state.canvas_to_screen(px, py, region.width, region.height)
-                        print(f"[OpenComp] Link from {port_node}[{port_index}] ({'out' if is_output else 'in'})")
-                        print(f"  Node: pos=({nv.x:.0f},{nv.y:.0f}) size=({nv.width:.0f}x{nv.height:.0f})")
-                        print(f"  Port canvas: ({px:.0f},{py:.0f}) -> screen: ({sx:.0f},{sy:.0f})")
-                        print(f"  Click screen: ({mx:.0f},{my:.0f}) canvas: ({cx:.0f},{cy:.0f})")
-                        print(f"  Pan: ({state.pan_x:.0f},{state.pan_y:.0f}) Zoom: {state.zoom:.2f}")
+                        console.debug(f"Link from {port_node}[{port_index}] ({'out' if is_output else 'in'})", "Canvas")
 
                     node_area.tag_redraw()
                     return {'RUNNING_MODAL'}
@@ -789,9 +785,9 @@ class OC_OT_canvas_modal(Operator):
                                     to_socket = target_node.inputs[state.link_from_port]
 
                                 tree.links.new(from_socket, to_socket)
-                                print(f"[OpenComp] Created link: {from_node.name} -> {target_node.name}")
+                                console.connection_made(from_node.name, from_socket.name, target_node.name, to_socket.name)
                             except Exception as e:
-                                print(f"[OpenComp] Link creation failed: {e}")
+                                console.warning(f"Link creation failed: {e}", "Canvas")
 
                         # Reset link state
                         self._is_linking = False
@@ -826,7 +822,7 @@ class OC_OT_canvas_modal(Operator):
                         try:
                             bpy.ops.wm.call_menu(name='OC_MT_add_node')
                         except Exception as e:
-                            print(f"[OpenComp] Could not open Add menu: {e}")
+                            console.warning(f"Could not open Add menu: {e}", "Canvas")
 
                 elif self._is_moving:
                     self._is_moving = False
@@ -901,7 +897,7 @@ class OC_OT_canvas_modal(Operator):
                                 tree.links.remove(link)
 
                             if links_to_remove:
-                                print(f"[OpenComp] Shake disconnect: removed {len(links_to_remove)} links")
+                                console.info(f"Shake disconnect: removed {len(links_to_remove)} links", "Canvas")
 
                         self._shake_disconnected = True  # Prevent multiple disconnects
                         self._shake_direction_changes = 0
@@ -1013,7 +1009,7 @@ class OC_OT_canvas_modal(Operator):
                             reroute_count += 1
 
                     if reroute_count:
-                        print(f"[OpenComp] Inserted {reroute_count} reroute nodes")
+                        console.info(f"Inserted {reroute_count} reroute nodes", "Canvas")
                         self._cut_was_performed = True
                 else:
                     # Cut mode - remove intersecting links
@@ -1026,7 +1022,7 @@ class OC_OT_canvas_modal(Operator):
                         tree.links.remove(link)
 
                     if links_to_remove:
-                        print(f"[OpenComp] Cut {len(links_to_remove)} links")
+                        console.info(f"Cut {len(links_to_remove)} links", "Canvas")
                         self._cut_was_performed = True
 
             # End drag cutting (but stay in cut mode if key still held)
@@ -1093,7 +1089,7 @@ class OC_OT_canvas_modal(Operator):
             try:
                 bpy.ops.wm.call_menu(name='OC_MT_add_node')
             except Exception as e:
-                print(f"[OpenComp] Could not open Add menu: {e}")
+                console.warning(f"Could not open Add menu: {e}", "Canvas")
             return {'RUNNING_MODAL'}
 
         if event.type == 'ACCENT_GRAVE' and event.value == 'PRESS':
@@ -1108,7 +1104,7 @@ class OC_OT_canvas_modal(Operator):
             try:
                 bpy.ops.wm.call_menu(name='OC_MT_add_node')
             except Exception as e:
-                print(f"[OpenComp] Could not open Add menu: {e}")
+                console.warning(f"Could not open Add menu: {e}", "Canvas")
             return {'RUNNING_MODAL'}
 
         if event.type == 'TAB' and event.value == 'PRESS':
@@ -1122,7 +1118,7 @@ class OC_OT_canvas_modal(Operator):
             try:
                 bpy.ops.wm.call_menu(name='OC_MT_add_node')
             except Exception as e:
-                print(f"[OpenComp] Could not open Add menu: {e}")
+                console.warning(f"Could not open Add menu: {e}", "Canvas")
             return {'RUNNING_MODAL'}
 
         if event.type == 'A' and event.value == 'PRESS' and event.shift:
@@ -1136,7 +1132,7 @@ class OC_OT_canvas_modal(Operator):
             try:
                 bpy.ops.wm.call_menu(name='OC_MT_add_node')
             except Exception as e:
-                print(f"[OpenComp] Could not open Add menu: {e}")
+                console.warning(f"Could not open Add menu: {e}", "Canvas")
             return {'RUNNING_MODAL'}
 
         # L key - cycle connection line style
@@ -1195,7 +1191,7 @@ class OC_OT_canvas_modal(Operator):
                 try:
                     bpy.ops.oc.read_browse('INVOKE_DEFAULT', node_name=new_node.name)
                 except Exception as e:
-                    print(f"[OpenComp] Could not open file browser: {e}")
+                    console.warning(f"Could not open file browser: {e}", "Canvas")
 
             return {'RUNNING_MODAL'}
 
@@ -1217,14 +1213,14 @@ class OC_OT_canvas_modal(Operator):
             if area.type == 'NODE_EDITOR':
                 area.tag_redraw()
 
-        print("[OpenComp] Canvas modal started")
+        console.launched("Canvas modal")
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
-        print("[OpenComp] Canvas modal cancelled")
+        console.closed("Canvas modal")
 
 
 class OC_OT_canvas_start(Operator):
@@ -1301,16 +1297,16 @@ class OC_OT_add_node(Operator):
                                 from_socket = from_node_obj.outputs[state.pending_link_port]
                                 to_socket = node.inputs[0]
                                 tree.links.new(from_socket, to_socket)
-                                print(f"[OpenComp] Auto-connected: {from_node_obj.name} -> {node.name}")
+                                console.connection_made(from_node_obj.name, from_socket.name, node.name, to_socket.name)
                         else:
                             # Dragged from input - connect new node's first output to that input
                             if len(from_node_obj.inputs) > state.pending_link_port and len(node.outputs) > 0:
                                 from_socket = node.outputs[0]
                                 to_socket = from_node_obj.inputs[state.pending_link_port]
                                 tree.links.new(from_socket, to_socket)
-                                print(f"[OpenComp] Auto-connected: {node.name} -> {from_node_obj.name}")
+                                console.connection_made(node.name, from_socket.name, from_node_obj.name, to_socket.name)
                 except Exception as e:
-                    print(f"[OpenComp] Auto-connect failed: {e}")
+                    console.warning(f"Auto-connect failed: {e}", "Canvas")
 
                 # Clear pending link state
                 state.pending_link_node = None
@@ -1478,12 +1474,12 @@ def register():
         try:
             bpy.ops.oc.canvas_modal('INVOKE_DEFAULT')
         except Exception as e:
-            print(f"[OpenComp] Canvas auto-start failed: {e}")
+            console.warning(f"Canvas auto-start failed: {e}", "Canvas")
         return None  # Don't repeat
 
     bpy.app.timers.register(_start_canvas, first_interval=0.5)
 
-    print("[OpenComp] Canvas operators registered")
+    console.registered("Canvas operators")
 
 
 def unregister():

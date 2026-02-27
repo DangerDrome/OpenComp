@@ -1,0 +1,408 @@
+/* Workspace Styles - Obsidian Panel System */
+
+/* ============================================
+   WORKSPACE ROOT
+   ============================================ */
+
+.workspace {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+/* ============================================
+   WORKSPACE RIBBON (Left Icon Bar)
+   ============================================ */
+
+.workspace-ribbon {
+  display: flex;
+  flex-direction: column;
+  width: 44px;
+  background: var(--background-secondary-alt);
+  border-right: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.workspace-ribbon.is-collapsed {
+  width: 44px;
+}
+
+.workspace-ribbon-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--size-4-1);
+  gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.workspace-ribbon-collapse-btn {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--background-modifier-border);
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: all var(--anim-duration-fast);
+}
+
+.workspace-ribbon-collapse-btn:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+.workspace-ribbon-collapse-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.workspace-ribbon-collapse-btn.mod-right {
+  position: absolute;
+  top: 50%;
+  left: -12px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 48px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  z-index: 10;
+}
+
+/* Ribbon action buttons */
+.workspace-ribbon-action {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--anim-duration-fast);
+}
+
+.workspace-ribbon-action:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+.workspace-ribbon-action.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.workspace-ribbon-action svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ============================================
+   WORKSPACE SPLITS (Panels)
+   ============================================ */
+
+.workspace-split {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: width 0.15s ease;
+}
+
+.workspace-split.mod-left-split {
+  background: var(--background-secondary);
+  border-right: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.workspace-split.mod-right-split {
+  background: var(--background-secondary);
+  border-left: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.workspace-split.mod-root {
+  flex: 1;
+  min-width: 0;
+  background: var(--background-primary);
+}
+
+.workspace-split.is-collapsed {
+  width: 0 !important;
+  border-width: 0;
+  overflow: hidden;
+}
+
+.workspace-split.is-collapsed .workspace-split-content {
+  display: none;
+}
+
+.workspace-split-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ============================================
+   RESIZE HANDLES
+   ============================================ */
+
+.workspace-leaf-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 5;
+  transition: background var(--anim-duration-fast);
+}
+
+.workspace-leaf-resize-handle:hover,
+.workspace-leaf-resize-handle:active {
+  background: var(--text-accent);
+}
+
+.workspace-leaf-resize-handle.mod-left {
+  left: 0;
+  right: auto;
+}
+
+/* ============================================
+   WORKSPACE TABS
+   ============================================ */
+
+.workspace-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.workspace-tab-header-container {
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+  min-height: 32px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.workspace-tab-header-inner {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.workspace-tab-header-inner::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-tab-header-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* Individual tab header */
+.workspace-tab-header {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  padding: 0 var(--size-4-3);
+  height: 100%;
+  background: transparent;
+  border-right: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  transition: all var(--anim-duration-fast);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.workspace-tab-header:hover {
+  background: var(--interactive-hover);
+  color: var(--text-normal);
+}
+
+.workspace-tab-header.is-active {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border-bottom: 2px solid var(--text-accent);
+  margin-bottom: -1px;
+}
+
+.workspace-tab-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.workspace-tab-header-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.workspace-tab-header-title {
+  font-weight: 500;
+}
+
+.workspace-tab-header-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: var(--size-4-1);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--anim-duration-fast);
+}
+
+.workspace-tab-header:hover .workspace-tab-header-close {
+  opacity: 1;
+}
+
+.workspace-tab-header-close:hover {
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+}
+
+.workspace-tab-header-close svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ============================================
+   WORKSPACE LEAF (Content Pane)
+   ============================================ */
+
+.workspace-leaf {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--background-primary);
+}
+
+.workspace-leaf-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* ============================================
+   BOTTOM BAR (Timeline area)
+   ============================================ */
+
+.workspace-bottom-bar {
+  flex-shrink: 0;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+/* ============================================
+   SIDEBAR TAB PANEL STYLING
+   ============================================ */
+
+.sidebar-tabs {
+  height: 100%;
+}
+
+.sidebar-tabs .workspace-tab-header-container {
+  background: var(--background-secondary-alt);
+}
+
+.sidebar-tabs .workspace-tab-header.is-active {
+  background: var(--background-secondary);
+}
+
+.sidebar-tabs .workspace-leaf {
+  background: var(--background-secondary);
+}
+
+/* ============================================
+   STACKED TABS (Alternative layout)
+   ============================================ */
+
+.workspace-tabs.mod-stacked .workspace-tab-header-container {
+  flex-direction: column;
+  height: auto;
+  width: 32px;
+  border-bottom: none;
+  border-right: 1px solid var(--background-modifier-border);
+}
+
+.workspace-tabs.mod-stacked .workspace-tab-header {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  padding: var(--size-4-3) var(--size-4-1);
+  border-right: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.workspace-tabs.mod-stacked .workspace-tab-header.is-active {
+  border-bottom: none;
+  border-left: 2px solid var(--text-accent);
+  margin-bottom: 0;
+  margin-left: -1px;
+}
+
+/* ============================================
+   EMPTY STATE
+   ============================================ */
+
+.workspace-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--size-4-6);
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.workspace-empty-state-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--size-4-3);
+  color: var(--text-faint);
+  opacity: 0.5;
+}
+
+.workspace-empty-state-title {
+  font-size: var(--font-ui-large);
+  font-weight: 500;
+  margin-bottom: var(--size-4-1);
+}
+
+.workspace-empty-state-description {
+  font-size: var(--font-ui-small);
+  max-width: 300px;
+}

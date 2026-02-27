@@ -11,6 +11,7 @@ NOTE: Evaluation MUST happen inside a draw callback to have GPU context.
 import bpy
 from .evaluator import topological_sort, CycleDetectedError
 from ..gpu_pipeline.texture_pool import TexturePool
+from .. import console
 
 
 # ── Texture cache ─────────────────────────────────────────────────────
@@ -19,6 +20,12 @@ from ..gpu_pipeline.texture_pool import TexturePool
 # Instance attributes like _output_texture don't survive across wrappers.
 # Store textures here, keyed by node name, so sockets can look them up.
 _node_textures = {}
+
+# ── Pixel cache (workaround for GPU readback issues in headless mode) ──
+# Stores raw numpy pixel arrays for nodes that produce them (e.g. Read).
+# Used for SHM output when GPU texture.read() is unreliable.
+# Format: {node_name: (width, height, numpy_array)}
+_node_pixels = {}
 
 
 # ── Deferred evaluation ───────────────────────────────────────────────
@@ -46,7 +53,7 @@ def _evaluate_tree(tree):
     try:
         order = topological_sort(graph)
     except CycleDetectedError:
-        print("[OpenComp] Cycle detected — evaluation skipped")
+        console.warning("Cycle detected — evaluation skipped", "Evaluator")
         return
 
     # Create texture pool for this evaluation pass
@@ -60,7 +67,7 @@ def _evaluate_tree(tree):
         except NotImplementedError:
             pass
         except Exception as e:
-            print(f"[OpenComp] {node_name} evaluate error: {e}")
+            console.error(f"{node_name} evaluate error: {e}", "Node")
 
 
 _gpu_context_verified = False
@@ -96,7 +103,7 @@ def _eval_draw_callback():
             if tree.bl_idname == "OC_NT_compositor":
                 _evaluate_tree(tree)
     except Exception as e:
-        print(f"[OpenComp] Evaluation error: {e}")
+        console.error(f"Evaluation error: {e}", "Evaluator")
 
 
 def request_evaluate():

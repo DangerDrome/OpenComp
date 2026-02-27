@@ -5,14 +5,20 @@ evaluate_shader() is called by every processing node. It:
   2. Allocates an output texture from the pool
   3. Renders a fullscreen quad with the shader into a framebuffer
   4. Returns the output texture
+
+NOTE: Shader cache is keyed per-window because GPU resources are tied to
+the GL context of the window they were created in. A global cache would
+crash when opening a second window.
 """
 
 import re
 from pathlib import Path
+from .. import console
 
 SHADER_DIR = Path(__file__).resolve().parent.parent / "shaders"
 
-# Shader cache: frag_name → (GPUShader, batch, uniforms_info)
+# Shader cache: (window_id, frag_name) → (GPUShader, batch, uniforms_info)
+# Keyed per-window to avoid GPU context issues with multiple windows
 _shader_cache = {}
 
 
@@ -79,10 +85,27 @@ def _glsl_to_gpu_type(glsl_type):
     return mapping.get(glsl_type, 'FLOAT')
 
 
+def _get_window_id():
+    """Get the current window ID for per-window shader caching."""
+    try:
+        import bpy
+        if bpy.context.window:
+            return id(bpy.context.window)
+    except Exception:
+        pass
+    return 0  # Fallback for background mode or no context
+
+
 def _get_cached_shader(frag_name):
-    """Get or compile+cache a shader. Requires GPU context."""
-    if frag_name in _shader_cache:
-        return _shader_cache[frag_name]
+    """Get or compile+cache a shader. Requires GPU context.
+
+    Cache is keyed by (window_id, frag_name) to support multiple windows.
+    """
+    window_id = _get_window_id()
+    cache_key = (window_id, frag_name)
+
+    if cache_key in _shader_cache:
+        return _shader_cache[cache_key]
 
     import gpu
     from gpu_extras.batch import batch_for_shader
@@ -130,9 +153,9 @@ def _get_cached_shader(frag_name):
         del interface_info
 
     except Exception as e:
-        print(f"[OpenComp] Shader compilation failed for {frag_name}: {e}")
-        print(f"[OpenComp] Samplers: {samplers}")
-        print(f"[OpenComp] Push constants: {push_constants}")
+        console.error(f"Shader compilation failed for {frag_name}: {e}", "GPU")
+        console.debug(f"Samplers: {samplers}", "GPU")
+        console.debug(f"Push constants: {push_constants}", "GPU")
         raise
 
     batch = batch_for_shader(
@@ -143,8 +166,8 @@ def _get_cached_shader(frag_name):
 
     # Store uniform info for binding
     uniforms_info = {'samplers': samplers, 'push_constants': push_constants}
-    _shader_cache[frag_name] = (shader, batch, uniforms_info)
-    print(f"[OpenComp] Shader compiled: {frag_name}")
+    _shader_cache[cache_key] = (shader, batch, uniforms_info)
+    console.shader_compiled(f"{frag_name} (window {window_id})")
     return shader, batch, uniforms_info
 
 
@@ -194,6 +217,16 @@ def evaluate_shader(frag_name, input_tex, uniforms, texture_pool,
     return output_tex
 
 
-def clear_cache():
-    """Clear the shader cache (e.g. on addon unregister)."""
-    _shader_cache.clear()
+def clear_cache(window_id=None):
+    """Clear the shader cache.
+
+    Args:
+        window_id: If provided, only clear shaders for this window.
+                   If None, clear all shaders (e.g. on addon unregister).
+    """
+    if window_id is None:
+        _shader_cache.clear()
+    else:
+        keys_to_remove = [k for k in _shader_cache if k[0] == window_id]
+        for key in keys_to_remove:
+            del _shader_cache[key]

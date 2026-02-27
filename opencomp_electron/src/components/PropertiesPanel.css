@@ -1,0 +1,175 @@
+/* Properties Panel Styles - Obsidian-inspired */
+
+.properties-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--background-secondary);
+}
+
+.properties-panel-header {
+  padding: var(--size-4-2) var(--size-4-3);
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.properties-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--size-4-2);
+}
+
+.properties-panel-empty {
+  padding: var(--size-4-4);
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+}
+
+/* Sections */
+.properties-section {
+  margin-bottom: var(--size-4-3);
+}
+
+.properties-section-header {
+  padding: var(--size-4-1) 0;
+  margin-bottom: var(--size-4-1);
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Rows */
+.properties-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--size-4-1) 0;
+  gap: var(--size-4-2);
+}
+
+.properties-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.properties-value {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inputs */
+.properties-input {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.properties-input input {
+  width: 80px;
+  padding: var(--size-4-1);
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  font-size: 11px;
+  text-align: right;
+}
+
+.properties-input input:focus {
+  border-color: var(--text-accent);
+  outline: none;
+}
+
+/* Vector inputs */
+.properties-vector {
+  display: flex;
+  gap: var(--size-4-1);
+}
+
+.properties-vector input {
+  width: 50px;
+  text-align: center;
+}
+
+/* Checkbox styling */
+.properties-input input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--text-accent);
+}
+
+/* Select dropdown */
+.properties-input select {
+  padding: var(--size-4-1);
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.properties-input select:focus {
+  border-color: var(--text-accent);
+  outline: none;
+}
+
+/* Color picker */
+.properties-color {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+/* File input row */
+.properties-row-file {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--size-4-1);
+}
+
+.properties-file-input {
+  display: flex;
+  width: 100%;
+  gap: 4px;
+}
+
+.properties-file-input input {
+  flex: 1;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+}
+
+.properties-file-input .btn-small {
+  padding: 4px 8px;
+  min-width: auto;
+  font-size: 11px;
+  background: var(--interactive-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.properties-file-input .btn-small:hover {
+  background: var(--interactive-hover);
+}

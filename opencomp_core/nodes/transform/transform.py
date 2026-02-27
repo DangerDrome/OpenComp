@@ -5,11 +5,10 @@ Outputs: Image (RGBA32F, transformed)
 Shader:  shaders/transform.frag
 """
 
-import math
-
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class TransformNode(OpenCompNode):
@@ -62,7 +61,7 @@ class TransformNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] TransformNode.evaluate error: {e}")
+            console.error(f"TransformNode.evaluate error: {e}", "Node")
             return None
 
 

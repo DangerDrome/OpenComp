@@ -5,10 +5,10 @@ Displays and edits properties of the selected node.
 
 from qtpy.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QDoubleSpinBox, QLineEdit, QComboBox, QPushButton,
-    QScrollArea, QFrame, QFileDialog, QGroupBox,
+    QDoubleSpinBox, QLineEdit, QComboBox,
+    QScrollArea, QFrame,
 )
-from qtpy.QtCore import Signal, Qt
+from qtpy.QtCore import Signal
 
 
 class PropertiesPanel(QWidget):

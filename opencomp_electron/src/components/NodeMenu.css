@@ -1,0 +1,122 @@
+/* Nuke-style Node Tab Menu */
+
+.node-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 280px;
+  max-width: 400px;
+  max-height: 400px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-l);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.node-menu-search {
+  padding: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.node-menu-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  font-size: 13px;
+  outline: none;
+}
+
+.node-menu-input:focus {
+  border-color: var(--text-accent);
+}
+
+.node-menu-input::placeholder {
+  color: var(--text-faint);
+}
+
+.node-menu-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.node-menu-category {
+  margin-bottom: 4px;
+}
+
+.node-menu-category-header {
+  padding: 4px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.node-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background var(--anim-duration-fast);
+}
+
+.node-menu-item:hover,
+.node-menu-item.selected {
+  background: var(--interactive-hover);
+}
+
+.node-menu-item.selected {
+  background: var(--text-accent);
+  color: white;
+}
+
+.node-menu-item.selected .node-menu-item-shortcut {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.node-menu-item-label {
+  font-size: 13px;
+  color: var(--text-normal);
+}
+
+.node-menu-item.selected .node-menu-item-label {
+  color: white;
+}
+
+.node-menu-item-shortcut {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: var(--font-monospace);
+}
+
+.node-menu-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+/* Scrollbar styling */
+.node-menu-results::-webkit-scrollbar {
+  width: 6px;
+}
+
+.node-menu-results::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.node-menu-results::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 3px;
+}
+
+.node-menu-results::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-active-thumb-bg);
+}

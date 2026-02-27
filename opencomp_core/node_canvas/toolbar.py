@@ -6,7 +6,7 @@ Draws a Nuke-style vertical toolbar with tool icons.
 import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
-from mathutils import Vector
+from .. import console
 
 # Toolbar configuration
 TOOLBAR_BG_COLOR = (0.16, 0.16, 0.16, 1.0)  # Dark gray
@@ -89,13 +89,7 @@ def _draw_toolbar(context, region_width, region_height):
     x_center = region_width / 2
     y = region_height - BUTTON_PADDING - BUTTON_SIZE / 2
 
-    mouse_x, mouse_y = 0, 0
-    try:
-        # Get mouse position relative to region
-        # This is approximate - proper hit testing happens in modal
-        pass
-    except:
-        pass
+    # Mouse position is handled in modal operator, not draw callback
 
     for button in TOOLBAR_BUTTONS:
         if button["id"] == "separator":
@@ -170,7 +164,6 @@ class OC_OT_toolbar_modal(bpy.types.Operator):
 
         if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             # Get mouse position relative to region
-            region = context.region
             mx = event.mouse_region_x
             my = event.mouse_region_y
 
@@ -191,9 +184,9 @@ class OC_OT_toolbar_modal(bpy.types.Operator):
                             op = getattr(getattr(bpy.ops, op_path[0]), op_path[1])
                             props = button.get("props", {})
                             op('INVOKE_DEFAULT', **props)
-                            print(f"[OpenComp] Toolbar: executed {button['operator']}")
+                            console.debug(f"Toolbar: executed {button['operator']}", "Canvas")
                     except Exception as e:
-                        print(f"[OpenComp] Toolbar operator failed: {e}")
+                        console.warning(f"Toolbar operator failed: {e}", "Canvas")
 
                 return {'RUNNING_MODAL'}
 
@@ -214,7 +207,7 @@ class OC_OT_toolbar_modal(bpy.types.Operator):
 
         OC_OT_toolbar_modal._is_running = True
         context.window_manager.modal_handler_add(self)
-        print("[OpenComp] Toolbar modal started")
+        console.debug("Toolbar modal started", "Canvas")
         return {'RUNNING_MODAL'}
 
 
@@ -228,14 +221,14 @@ def register():
         _draw_handler = bpy.types.SpaceImageEditor.draw_handler_add(
             _draw_callback, (), 'WINDOW', 'POST_PIXEL'
         )
-        print("[OpenComp] Toolbar draw handler registered")
+        console.registered("Toolbar draw handler")
 
     # Start the toolbar modal
     def _start_toolbar():
         try:
             bpy.ops.oc.toolbar_modal('INVOKE_DEFAULT')
         except Exception as e:
-            print(f"[OpenComp] Toolbar modal start failed: {e}")
+            console.warning(f"Toolbar modal start failed: {e}", "Canvas")
         return None
 
     bpy.app.timers.register(_start_toolbar, first_interval=0.6)
@@ -247,7 +240,7 @@ def unregister():
     if _draw_handler is not None:
         bpy.types.SpaceImageEditor.draw_handler_remove(_draw_handler, 'WINDOW')
         _draw_handler = None
-        print("[OpenComp] Toolbar draw handler unregistered")
+        console.unregistered("Toolbar draw handler")
 
     try:
         bpy.utils.unregister_class(OC_OT_toolbar_modal)

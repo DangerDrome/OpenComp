@@ -8,9 +8,9 @@ Qt events periodically.
 """
 
 import bpy
-import os
 import sys
-from typing import Optional
+from os import environ as os_environ  # Only import environ, not full os module
+from .. import console
 
 # Global state
 _qt_app = None
@@ -25,17 +25,17 @@ def _check_qt_available() -> bool:
 
     try:
         # Try to import required modules
-        os.environ.setdefault('QT_API', 'pyside6')
+        os_environ.setdefault('QT_API', 'pyside6')
 
-        from qtpy.QtWidgets import QApplication
-        from qtpy.QtCore import QTimer
+        from qtpy.QtWidgets import QApplication  # noqa: F401
+        from qtpy.QtCore import QTimer  # noqa: F401
 
         _qt_available = True
         return True
 
     except ImportError as e:
-        print(f"[OpenComp] Qt not available: {e}")
-        print("[OpenComp] Install PySide6: pip install PySide6 NodeGraphQt")
+        console.warning(f"Qt not available: {e}", "Qt")
+        console.info("Install PySide6: pip install PySide6 NodeGraphQt", "Qt")
         _qt_available = False
         return False
 
@@ -59,7 +59,7 @@ def _process_qt_events():
     try:
         _qt_app.processEvents()
     except Exception as e:
-        print(f"[OpenComp] Qt event processing error: {e}")
+        console.error(f"Qt event processing error: {e}", "Qt")
 
     return 0.016  # ~60 FPS
 
@@ -82,7 +82,7 @@ def launch_nodegraph() -> bool:
             _qt_window.raise_()
             _qt_window.activateWindow()
             return True
-        except:
+        except Exception:
             pass
 
     try:
@@ -143,11 +143,11 @@ def launch_nodegraph() -> bool:
                 persistent=True
             )
 
-        print("[OpenComp] NodeGraphQt window launched")
+        console.launched("NodeGraphQt window")
         return True
 
     except Exception as e:
-        print(f"[OpenComp] Failed to launch NodeGraphQt: {e}")
+        console.error(f"Failed to launch NodeGraphQt: {e}", "Qt")
         import traceback
         traceback.print_exc()
         return False
@@ -256,8 +256,7 @@ def _qt_type_to_bl_idname(node) -> str:
     Returns:
         Blender node type string.
     """
-    # Get the node class identifier
-    identifier = getattr(node.__class__, '__identifier__', '')
+    # Get the node class name
     name = getattr(node.__class__, 'NODE_NAME', node.__class__.__name__)
 
     # Map common types
@@ -307,18 +306,18 @@ def close_nodegraph():
     if _qt_window is not None:
         try:
             _qt_window.close()
-        except:
+        except Exception:
             pass
         _qt_window = None
 
     if _qt_timer_handle is not None:
         try:
             bpy.app.timers.unregister(_qt_timer_handle)
-        except:
+        except Exception:
             pass
         _qt_timer_handle = None
 
-    print("[OpenComp] NodeGraphQt window closed")
+    console.closed("NodeGraphQt window")
 
 
 def is_nodegraph_open() -> bool:
@@ -327,7 +326,7 @@ def is_nodegraph_open() -> bool:
     if _qt_window is not None:
         try:
             return _qt_window.isVisible()
-        except:
+        except Exception:
             pass
     return False
 
@@ -399,7 +398,7 @@ _classes = [
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    print("[OpenComp] NodeGraphQt integration registered")
+    console.registered("NodeGraphQt integration")
 
 
 def unregister():

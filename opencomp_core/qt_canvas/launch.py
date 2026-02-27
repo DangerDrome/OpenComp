@@ -10,21 +10,23 @@ Usage:
 """
 
 import sys
-import os
 import argparse
+from os import environ as os_environ  # Only import environ, not full os module
+from pathlib import Path
 
 # Set Qt API before importing qtpy
-os.environ.setdefault('QT_API', 'pyside6')
+os_environ.setdefault('QT_API', 'pyside6')
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_this_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(_this_dir.parent))
 
-from qtpy.QtWidgets import QApplication
-from qtpy.QtCore import Qt, QTimer
+from qtpy.QtWidgets import QApplication  # noqa: E402
+from qtpy.QtCore import Qt  # noqa: E402
 
-from ui.main_window import OpenCompMainWindow
-from ipc.client import IpcClient
-from ipc.protocol import cmd_get_graph_state
+from ui.main_window import OpenCompMainWindow  # noqa: E402
+from ipc.client import IpcClient  # noqa: E402
+from ipc.protocol import cmd_get_graph_state  # noqa: E402
 
 
 def parse_args():
@@ -116,7 +118,7 @@ def main():
         ipc_client.start()
 
     if args.debug:
-        print(f"[OpenComp Canvas] Started")
+        print("[OpenComp Canvas] Started")
         print(f"[OpenComp Canvas] Socket path: {args.socket_path}")
 
     # Run event loop

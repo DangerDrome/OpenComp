@@ -6,6 +6,7 @@ Evaluator orchestrates safe per-node evaluation.
 """
 
 from collections import deque
+from .. import console
 
 
 class CycleDetectedError(Exception):
@@ -107,5 +108,5 @@ class Evaluator:
         try:
             return self._results.get(node_id, None)
         except Exception as e:
-            print(f"[OpenComp] Evaluator error for {node_id}: {e}")
+            console.error(f"Evaluator error for {node_id}: {e}", "Evaluator")
             return None

@@ -1,0 +1,128 @@
+/* Viewer Styles - Obsidian-inspired */
+
+.viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--background-secondary-alt);
+}
+
+.viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--size-4-1) var(--size-4-2);
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  min-height: 32px;
+}
+
+.viewer-title {
+  font-size: var(--font-ui-small);
+  font-weight: 500;
+  color: var(--text-normal);
+}
+
+.viewer-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+}
+
+.viewer-controls .btn {
+  padding: var(--size-4-1);
+  min-width: 26px;
+  font-size: 11px;
+}
+
+.viewer-zoom {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Canvas container */
+.viewer-canvas-container {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-secondary-alt);
+  position: relative;
+}
+
+.viewer-canvas-wrapper {
+  transform-origin: center center;
+  transition: none;
+}
+
+.viewer-canvas {
+  display: block;
+  box-shadow: var(--shadow-l);
+  border-radius: var(--radius-s);
+}
+
+/* Checkerboard pattern for transparency */
+.viewer-canvas-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(45deg, var(--background-primary-alt) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--background-primary-alt) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--background-primary-alt) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--background-primary-alt) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* Footer */
+.viewer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--size-4-1) var(--size-4-2);
+  background: var(--background-secondary);
+  border-top: 1px solid var(--background-modifier-border);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+}
+
+.viewer-frame {
+  color: var(--text-accent);
+  font-weight: 500;
+}
+
+/* Viewer overlay info */
+.viewer-info-overlay {
+  position: absolute;
+  bottom: var(--size-4-2);
+  left: var(--size-4-2);
+  padding: var(--size-4-1) var(--size-4-2);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-s);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Zoom indicator */
+.viewer-zoom-indicator {
+  position: absolute;
+  top: var(--size-4-2);
+  right: var(--size-4-2);
+  padding: var(--size-4-1) var(--size-4-2);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-s);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-normal);
+  pointer-events: none;
+}

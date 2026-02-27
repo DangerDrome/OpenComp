@@ -5,7 +5,7 @@ Handles serialization and deserialization of node graph sessions.
 
 import json
 import pathlib
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, Any
 
 
 def save_session(graph, filepath: str) -> bool:
@@ -63,7 +63,7 @@ def load_session(graph, filepath: str) -> bool:
 
         # Validate format
         if session.get('format') != 'opencomp_graph':
-            print(f"[OpenComp] Invalid session format")
+            print("[OpenComp] Invalid session format")
             return False
 
         # Restore session using NodeGraphQt's deserialize
@@ -106,7 +106,7 @@ def serialize_graph_state(graph) -> Dict[str, Any]:
         try:
             for prop_name in node.model.custom_properties:
                 node_data['properties'][prop_name] = node.get_property(prop_name)
-        except:
+        except Exception:
             pass
 
         nodes.append(node_data)
@@ -206,7 +206,7 @@ def deserialize_graph_state(graph, state: Dict[str, Any]) -> bool:
             for prop_name, prop_value in props.items():
                 try:
                     node.set_property(prop_name, prop_value)
-                except:
+                except Exception:
                     pass
 
         # Create links

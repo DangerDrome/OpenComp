@@ -8,6 +8,7 @@ Shader:  shaders/sharpen.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class SharpenNode(OpenCompNode):
@@ -45,7 +46,7 @@ class SharpenNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] SharpenNode.evaluate error: {e}")
+            console.error(f"SharpenNode.evaluate error: {e}", "Node")
             return None
 
 

@@ -8,6 +8,7 @@ Shader:  shaders/constant.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class ConstantNode(OpenCompNode):
@@ -45,7 +46,7 @@ class ConstantNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] ConstantNode.evaluate error: {e}")
+            console.error(f"ConstantNode.evaluate error: {e}", "Node")
             return None
 
 

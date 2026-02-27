@@ -7,6 +7,7 @@ All headers are GPU-drawn to avoid Blender's native look.
 import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
+from .. import console
 
 # Header styling
 HEADER_BG_COLOR = (0.16, 0.16, 0.16, 1.0)
@@ -127,7 +128,7 @@ def register():
     # Hide default headers first
     try:
         bpy.utils.unregister_class(bpy.types.NODE_HT_header)
-        print("[OpenComp] Hid NODE_HT_header")
+        console.debug("Hid NODE_HT_header", "UI")
     except Exception:
         pass
 
@@ -135,14 +136,12 @@ def register():
     _node_header_handler = bpy.types.SpaceNodeEditor.draw_handler_add(
         _draw_node_header, (), 'HEADER', 'POST_PIXEL'
     )
-    print("[OpenComp] Node Editor GPU header registered")
+    console.registered("Node Editor GPU header")
 
     _properties_header_handler = bpy.types.SpaceProperties.draw_handler_add(
         _draw_properties_header, (), 'HEADER', 'POST_PIXEL'
     )
-    print("[OpenComp] Properties GPU header registered")
-
-    print("[OpenComp] Custom GPU headers registered")
+    console.registered("Properties GPU header")
 
 
 def unregister():
@@ -159,5 +158,5 @@ def unregister():
     # Restore default headers
     try:
         bpy.utils.register_class(bpy.types.NODE_HT_header)
-    except:
+    except Exception:
         pass

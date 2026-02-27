@@ -25,6 +25,7 @@ bl_info = {
 # 9. openclaw_integration (last — depends on everything)
 
 import bpy
+from . import console
 
 
 # ── Node Add menu override ─────────────────────────────────────────────
@@ -98,7 +99,7 @@ def _override_node_add_menu():
         _original_node_add_menu_draw = cls.draw
         cls.draw = _opencomp_node_add_menu_draw
     except Exception as e:
-        print(f"[OpenComp] Node add menu override skipped: {e}")
+        console.warning(f"Node add menu override skipped: {e}")
 
 
 def _restore_node_add_menu():
@@ -168,7 +169,7 @@ def _override_node_context_menu():
         _original_node_context_menu_draw = cls.draw
         cls.draw = _opencomp_node_context_menu_draw
     except Exception as e:
-        print(f"[OpenComp] Node context menu override skipped: {e}")
+        console.warning(f"Node context menu override skipped: {e}")
 
 
 def _restore_node_context_menu():
@@ -460,12 +461,17 @@ def register():
         from .nodegraph import qt_integration
         qt_integration.register()
     except ImportError as e:
-        print(f"[OpenComp] NodeGraphQt integration not available: {e}")
+        console.info(f"NodeGraphQt integration not available: {e}")
 
     # DISABLED: Custom timeline UI (using native Blender timeline instead)
     # from . import ui
     # ui.register()
-    print("[OpenComp] Using native Blender timeline")
+
+    # Print startup banner
+    console.print_startup_banner(
+        f"{bl_info['version'][0]}.{bl_info['version'][1]}.{bl_info['version'][2]}"
+    )
+    console.registered("OpenComp add-on")
 
     # Override node editor menus
     _override_node_add_menu()

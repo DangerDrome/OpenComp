@@ -156,7 +156,7 @@ def get_clips(timeline):
             if src_range is None:
                 continue
 
-            fps = src_range.start_time.rate
+            _fps = src_range.start_time.rate  # noqa: F841 - available for future use
 
             src_in = src_range.start_time
             src_out = src_in + src_range.duration

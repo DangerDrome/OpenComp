@@ -5,8 +5,7 @@ Socket path: /tmp/opencomp_ipc.sock
 """
 
 import json
-from dataclasses import dataclass, asdict
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any
 
 # Default socket path
 SOCKET_PATH = "/tmp/opencomp_ipc.sock"

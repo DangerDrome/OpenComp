@@ -6,7 +6,7 @@ Runs in a QThread to avoid blocking the Qt event loop.
 
 import socket
 import time
-from typing import Optional, Dict, Any
+from typing import Optional
 
 from qtpy.QtCore import QThread, Signal, QMutex, QWaitCondition
 
@@ -97,7 +97,7 @@ class IpcClient(QThread):
         if self._socket:
             try:
                 self._socket.close()
-            except:
+            except Exception:
                 pass
             self._socket = None
         self._recv_buffer = b''
@@ -120,7 +120,7 @@ class IpcClient(QThread):
         if self._socket:
             try:
                 self._socket.close()
-            except:
+            except Exception:
                 pass
             self._socket = None
         self.wait(2000)  # Wait up to 2 seconds for thread to finish
@@ -150,7 +150,7 @@ class IpcClient(QThread):
         # Send command
         try:
             self._socket.sendall(encode_message(msg))
-        except:
+        except Exception:
             self.error.emit("Failed to send command")
             return None
 
@@ -179,7 +179,7 @@ class IpcClient(QThread):
         try:
             self._socket.sendall(encode_message(msg))
             return True
-        except:
+        except Exception:
             return False
 
     def ping(self, timeout_ms: int = 1000) -> bool:
@@ -219,7 +219,7 @@ class IpcClientSync:
             self._socket.settimeout(timeout)
             self._socket.connect(self.socket_path)
             return True
-        except:
+        except Exception:
             self._socket = None
             return False
 
@@ -228,7 +228,7 @@ class IpcClientSync:
         if self._socket:
             try:
                 self._socket.close()
-            except:
+            except Exception:
                 pass
             self._socket = None
 
@@ -260,7 +260,7 @@ class IpcClientSync:
             line, _ = data.split(b'\n', 1)
             return decode_message(line)
 
-        except:
+        except Exception:
             return None
 
     def ping(self) -> bool:

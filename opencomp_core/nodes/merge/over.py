@@ -8,6 +8,7 @@ Shader:  shaders/over.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class OverNode(OpenCompNode):
@@ -51,7 +52,7 @@ class OverNode(OpenCompNode):
             )
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] OverNode.evaluate error: {e}")
+            console.error(f"OverNode.evaluate error: {e}", "Node")
             return None
 
 

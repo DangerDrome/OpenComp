@@ -1,0 +1,53 @@
+/* OpenComp Node Styles - Nuke-inspired */
+
+.oc-node {
+  min-width: 80px;
+  max-width: 120px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.oc-node:hover {
+  border-color: var(--text-faint);
+}
+
+.oc-node-selected {
+  border-color: var(--text-accent) !important;
+  box-shadow: 0 0 0 1px var(--text-accent);
+}
+
+/* Header - colored bar like Nuke */
+.oc-node-header {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 2px 2px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.oc-node-label {
+  font-weight: 500;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+
+/* React Flow handles - keep them simple and functional */
+.oc-node .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--background-secondary);
+  border-radius: 50%;
+}
+
+/* Connection line styling */
+.react-flow__connection-line {
+  stroke: var(--socket-image);
+  stroke-width: 2px;
+}

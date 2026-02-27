@@ -1,0 +1,99 @@
+/* Toolbar Styles - Obsidian-inspired */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  flex: 1;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbar-group .btn {
+  padding: var(--size-4-1);
+  min-width: 28px;
+  height: 28px;
+}
+
+.toolbar-group .btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--background-modifier-border);
+  margin: 0 var(--size-4-1);
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.toolbar-status {
+  font-size: 11px;
+  color: var(--text-faint);
+  padding: 0 var(--size-4-2);
+}
+
+.toolbar-status.connected {
+  color: var(--color-green);
+}
+
+.toolbar-status.disconnected {
+  color: var(--color-red);
+}
+
+/* Toolbar dropdown */
+.toolbar-dropdown {
+  position: relative;
+}
+
+.toolbar-dropdown-content {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--size-4-1);
+  min-width: 160px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-l);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.toolbar-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  width: 100%;
+  padding: var(--size-4-2) var(--size-4-3);
+  background: transparent;
+  border: none;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  transition: background var(--anim-duration-fast);
+}
+
+.toolbar-dropdown-item:hover {
+  background: var(--interactive-hover);
+}
+
+.toolbar-dropdown-item-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+
+.toolbar-dropdown-divider {
+  height: 1px;
+  background: var(--background-modifier-border);
+  margin: var(--size-4-1) 0;
+}

@@ -45,7 +45,7 @@ def timeline_to_vse(timeline, scene=None):
             if rec_range is None:
                 continue
 
-            fps = src_range.start_time.rate
+            _fps = src_range.start_time.rate  # noqa: F841 - available for future use
             rec_start = int(rec_range.start_time.value) + 1  # Blender 1-based
             duration = int(rec_range.duration.value)
 

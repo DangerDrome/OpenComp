@@ -8,6 +8,7 @@ Shader:  shaders/blur_h.frag + shaders/blur_v.frag
 import bpy
 from ..base import OpenCompNode
 from ...gpu_pipeline.executor import evaluate_shader
+from ... import console
 
 
 class BlurNode(OpenCompNode):
@@ -57,7 +58,7 @@ class BlurNode(OpenCompNode):
             self._output_texture = output
             return self._output_texture
         except Exception as e:
-            print(f"[OpenComp] BlurNode.evaluate error: {e}")
+            console.error(f"BlurNode.evaluate error: {e}", "Node")
             return None
 
 

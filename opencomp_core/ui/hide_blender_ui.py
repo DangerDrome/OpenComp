@@ -5,6 +5,7 @@ headers, and menus to make room for our Nuke-style UI.
 """
 
 import bpy
+from .. import console
 
 _hidden_classes = []
 _draw_handlers = []
@@ -105,7 +106,7 @@ def hide_all_default_ui():
         except Exception:
             pass
 
-    print(f"[OpenComp] Hidden {count} default Blender UI classes")
+    console.info(f"Hidden {count} default Blender UI classes", "UI")
     return None  # Don't repeat timer
 
 
@@ -121,13 +122,13 @@ def restore_default_ui():
             pass
     _hidden_classes.clear()
     if count > 0:
-        print(f"[OpenComp] Restored {count} default Blender UI classes")
+        console.info(f"Restored {count} default Blender UI classes", "UI")
 
 
 def register():
     # DISABLED: Don't hide Blender UI - use native Blender interface for v0.2
     # hide_all_default_ui()
-    print("[OpenComp] UI hiding disabled - using native Blender interface")
+    console.info("UI hiding disabled — using native Blender interface", "UI")
 
 
 def unregister():
